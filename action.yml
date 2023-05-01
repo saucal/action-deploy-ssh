@@ -1,0 +1,39 @@
+name: "SSH Deploy"
+description: ""
+inputs:
+  env-host:
+    description: "Env Host"
+    required: true
+    default: ''
+  env-port:
+    description: "Env Port"
+    required: true
+    default: ''
+  env-user:
+    description: "Env User"
+    required: true
+    default: ''
+  env-key:
+    description: "Env SSH Key"
+    required: true
+    default: ''
+  env-remote-root:
+    description: "Env Remote Root"
+    required: true
+    default: ''
+  env-local-root:
+    description: "Env Local Root"
+    required: true
+    default: ''
+  env-ssh-flags:
+    description: "SSH Flags to pass to the RSync command"
+    required: false
+    default: 'azvrn'
+  force-ignore:
+    description: "Ignore files on deployment"
+    required: false
+    default: ''
+runs:
+  using: 'node16'
+  main: 'main.js'
+
