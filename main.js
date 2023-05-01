@@ -19,7 +19,7 @@
 	console.log( rsync.command() );
 
 	if ( remotePort && remotePort != 22 ) {
-		rsync.set('shell', 'ssh -p ' + remotePort );
+		rsync.set('shell', '"ssh -p ' + remotePort + '"' );
 	}
 
 	// Execute the command
