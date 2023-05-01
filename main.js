@@ -31,6 +31,13 @@
 		if ( code != 0 ) {
 			core.setFailed( 'rsync failed with code ' + code );
 		}
-	});
+	}, function(data){
+        // do things like parse progress
+		console.log( data.toString() );
+    }, function(data) {
+        // do things like parse error output
+		console( data.toString() );
+    }
+	);
 
 })()
