@@ -36,5 +36,5 @@ inputs:
 runs:
   using: composite
   steps:
-    - run: rsync -azvrn --rsh="ssh -i /home/runner/.ssh/github_actions -vv -p ${{ inputs.env-port }}" ${{ inputs.env-local-root }} ${{ inputs.env-user }}@${{ inputs.env-host }}:${{ inputs.env-remote-root }}
+    - run: rsync -azvrn --rsh="ssh -oStrictHostKeyChecking=no -i /home/runner/.ssh/github_actions -vv -p ${{ inputs.env-port }}" ${{ inputs.env-local-root }} ${{ inputs.env-user }}@${{ inputs.env-host }}:${{ inputs.env-remote-root }}
       shell: bash
