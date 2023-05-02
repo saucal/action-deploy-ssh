@@ -9,7 +9,7 @@
 	const remotePort = core.getInput('env-port', { required: false })
 
 	var rsync = new Rsync()
-	  .shell( 'ssh -oStrictHostKeyChecking=no -i /home/runner/.ssh/github_actions -vv -p ' + remotePort )
+	  .shell( 'ssh -oStrictHostKeyChecking=no -p ' + remotePort ) // -i /home/runner/.ssh/github_actions -vv
 	  .flags( core.getInput( 'env-ssh-flags', {require: true }) )
 	  .source( core.getInput('env-local-root', { required: true } ) )
 	  .destination( remoteTarget + ':' + core.getInput('env-remote-root', { required: true }));
