@@ -17,7 +17,7 @@
   localRoot = !localRoot.endsWith('/') ? localRoot + '/' : localRoot;
   remoteRoot = !remoteRoot.endsWith('/') ? remoteRoot + '/' : remoteRoot;
 
-  let includes,
+  let includes = [],
 	excludes = [];
 
   if (shellParams) {
