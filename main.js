@@ -10,6 +10,12 @@
   let ignoreList = core.getInput('force-ignore', { required: false });
   let shellParams = core.getInput('ssh-shell-params', { required: false });
   let extraOptions = core.getInput('ssh-extra-options', { required: false });
+  let localRoot = core.getInput('env-local-root', { required: true });
+  let remoteRoot = core.getInput('env-local-root', { required: true });
+
+  // Make sure paths end with a slash.
+  localRoot = !localRoot.endsWith('/') ? localRoot + '/' : localRoot;
+  remoteRoot = !remoteRoot.endsWith('/') ? remoteRoot + '/' : remoteRoot;
 
   let includes,
 	excludes = [];
@@ -61,12 +67,19 @@
     rsync.set(extraOptions[i]);
   }
 
-  rsync.include(includes);
-  rsync.exclude(excludes);
+  if ( includes.length > 0 ) {
+	rsync.include(includes);
+  }
 
-  rsync.debug(true); // core.isDebug()
+  if ( excludes.length > 0 ) {
+	  rsync.exclude(excludes);
+  }
 
   console.log(rsync.command());
+
+  if ( core.isDebug() ) {
+	  rsync.debug(true); 
+  }
 
   // Execute the command
   rsync.execute(
