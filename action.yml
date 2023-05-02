@@ -41,7 +41,10 @@ inputs:
     description: "Extra options for the RSync command"
     required: false
     default: ''
-
+  consistency-check:
+    description: ""
+    required: false
+    default: ''
 runs:
   using: 'node16'
   main: 'main.js'

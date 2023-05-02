@@ -7,8 +7,11 @@
 	'@' +
 	core.getInput('env-host', { required: true });
   const remotePort = core.getInput('env-port', { required: false });
+  const consistencyCheck = core.getInput('consistency-check', { required: false });
+
   let ignoreList = core.getInput('force-ignore', { required: false });
   let shellParams = core.getInput('ssh-shell-params', { required: false });
+  let sshFlags = core.getInput('ssh-flags', { require: true });
   let extraOptions = core.getInput('ssh-extra-options', { required: false });
   let localRoot = core.getInput('env-local-root', { required: true });
   let remoteRoot = core.getInput('env-local-root', { required: true });
@@ -60,9 +63,14 @@
 	}
   }
 
+  if ( consistencyCheck ) {
+	// Remove verbose flag from sshFlags.
+	sshFlags = sshFlags.replace( 'v', '' );
+  }
+
   var rsync = new Rsync()
 	.shell('ssh ' + shellParams.join(' '))
-	.flags(core.getInput('ssh-flags', { require: true }))
+	.flags( sshFlags )
 	.source( localRoot )
 	.destination(
 	  remoteTarget + ':' + remoteRoot
@@ -70,6 +78,11 @@
 
   for (let i = 0; i < extraOptions.length; i++) {
     rsync.set(extraOptions[i]);
+  }
+
+  if ( consistencyCheck ) {
+	rsync.set('dry-run');
+	rsync.set('info', 'NAME');
   }
 
   if ( includes.length > 0 ) {
@@ -86,6 +99,8 @@
 	  rsync.debug(true); 
   }
 
+  let processedFiles = 0;
+
   // Execute the command
   rsync.execute(
 	function (error, code, cmd) {
@@ -98,6 +113,7 @@
 	},
 	function (data) {
 	  // do things like parse progress
+	  processedFiles++;
 	  console.log(data.toString());
 	},
 	function (data) {
@@ -105,4 +121,8 @@
 	  console.error(data.toString());
 	}
   );
+
+  if ( consistencyCheck && processedFiles > 0 ) {
+	core.setFailed('Consistency check failed. ' + processedFiles + ' files differ while running RSync without a Manifest file.');
+  }
 })();
