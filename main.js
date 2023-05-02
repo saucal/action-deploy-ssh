@@ -114,13 +114,16 @@
 	function (data) {
 	  // do things like parse progress
 	  processedFiles++;
-	  console.log(data.toString());
+
+	  console.log( processedFiles + ':::' + data.toString());
 	},
 	function (data) {
 	  // do things like parse error output
 	  console.error(data.toString());
 	}
   );
+
+  console.log( 'processedFiles:' + processedFiles );
 
   if ( consistencyCheck && processedFiles > 0 ) {
 	core.setFailed('Consistency check failed. ' + processedFiles + ' files differ while running RSync without a Manifest file.');
