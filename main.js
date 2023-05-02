@@ -58,9 +58,9 @@
   var rsync = new Rsync()
 	.shell('ssh ' + shellParams.join(' '))
 	.flags(core.getInput('ssh-flags', { require: true }))
-	.source(core.getInput('env-local-root', { required: true }))
+	.source( localRoot )
 	.destination(
-	  remoteTarget + ':' + core.getInput('env-remote-root', { required: true })
+	  remoteTarget + ':' + remoteRoot
 	);
 
   for (let i = 0; i < extraOptions.length; i++) {
