@@ -9,7 +9,7 @@
 	const remotePort = core.getInput('env-port', { required: false })
 
 	var rsync = new Rsync()
-	  .shell( 'ssh -v -p ' + remotePort )
+	  .shell( 'ssh -i /home/runner/.ssh/github_actions -v -p ' + remotePort )
 	  .flags( core.getInput( 'env-ssh-flags', {require: true }) )
 	  .source( core.getInput('env-local-root', { required: true } ) )
 	  .destination( remoteTarget + ':' + core.getInput('env-remote-root', { required: true }));
@@ -25,10 +25,9 @@
 	// Execute the command
 	rsync.execute(function(error, code, cmd) {
 		// we're done
-		console.log( 'rsync error: ' + error );
-		console.log( 'rsync code: ' + code );
-
 		if ( code != 0 ) {
+			console.error( 'rsync error: ' + error );
+			console.error( 'rsync code: ' + code );
 			core.setFailed( 'rsync failed with code ' + code );
 		}
 	}, function(data){
@@ -36,7 +35,7 @@
 		console.log( data.toString() );
     }, function(data) {
         // do things like parse error output
-		console( data.toString() );
+		console.error( data.toString() );
     }
 	);
 
