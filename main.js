@@ -110,6 +110,12 @@
 		console.error('rsync code: ' + code);
 		core.setFailed('rsync failed with code ' + code);
 	  }
+
+	  console.log( 'processedFiles:' + processedFiles );
+
+	  if ( consistencyCheck && processedFiles > 0 ) {
+		core.setFailed('Consistency check failed. ' + processedFiles + ' files differ while running RSync without a Manifest file.');
+	  }
 	},
 	function (data) {
 	  // do things like parse progress
@@ -123,9 +129,5 @@
 	}
   );
 
-  console.log( 'processedFiles:' + processedFiles );
 
-  if ( consistencyCheck && processedFiles > 0 ) {
-	core.setFailed('Consistency check failed. ' + processedFiles + ' files differ while running RSync without a Manifest file.');
-  }
 })();
