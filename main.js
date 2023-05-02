@@ -7,9 +7,9 @@
 	'@' +
 	core.getInput('env-host', { required: true });
   const remotePort = core.getInput('env-port', { required: false });
-  let shellParams = core.getInput('shell-params', { required: false });
   let ignoreList = core.getInput('force-ignore', { required: false });
-  let extraOptions = core.getInput('extra-options', { required: false });
+  let shellParams = core.getInput('ssh-shell-params', { required: false });
+  let extraOptions = core.getInput('ssh-extra-options', { required: false });
 
   let includes,
 	excludes = [];
@@ -51,7 +51,7 @@
 
   var rsync = new Rsync()
 	.shell('ssh ' + shellParams.join(' '))
-	.flags(core.getInput('env-ssh-flags', { require: true }))
+	.flags(core.getInput('ssh-flags', { require: true }))
 	.source(core.getInput('env-local-root', { required: true }))
 	.destination(
 	  remoteTarget + ':' + core.getInput('env-remote-root', { required: true })
