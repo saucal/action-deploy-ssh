@@ -25,14 +25,19 @@ inputs:
     description: "Env Local Root"
     required: true
     default: ''
-  env-ssh-flags:
-    description: "SSH Flags to pass to the RSync command"
-    required: false
-    default: 'azvrn'
   force-ignore:
     description: "Ignore files on deployment"
     required: false
     default: ''
+  env-ssh-flags:
+    description: "SSH Flags to pass to the RSync command"
+    required: false
+    default: 'azvrn'
+  extra-options:
+    description: "Extra options for the RSync command"
+    required: false
+    default: ''
+
 runs:
   using: 'node16'
   main: 'main.js'
