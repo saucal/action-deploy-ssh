@@ -12,6 +12,7 @@
   let extraOptions = core.getInput('ssh-extra-options', { required: false });
   let localRoot = core.getInput('env-local-root', { required: true });
   let remoteRoot = core.getInput('env-local-root', { required: true });
+  let manifest = core.getInput('manifest', { required: false });
 
   // Make sure paths end with a slash.
   localRoot = !localRoot.endsWith('/') ? localRoot + '/' : localRoot;
@@ -26,6 +27,10 @@
 	shellParams = ['-oStrictHostKeyChecking=no'];
   }
 
+  if (remotePort) {
+	shellParams.push('-p ' + remotePort);
+  }
+
   if (extraOptions) {
 	extraOptions = extraOptions.split(' ');
   } else {
@@ -35,8 +40,8 @@
 	];
   }
 
-  if (remotePort) {
-	shellParams.push('-p ' + remotePort);
+  if ( manifest ) {
+	extraOptions.push( '--files-from=' + manifest );
   }
 
   if (ignoreList) {
