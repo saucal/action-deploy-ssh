@@ -34,6 +34,7 @@ inputs:
     required: false
     default: ''
 runs:
-  using: 'node16'
-  main: 'main.js'
-
+  using: composite
+  steps:
+    - run: rsync -azvrn --rsh="ssh -i /home/runner/.ssh/github_actions -vv -p ${{ inputs.env-port }}" ${{ inputs.env-local-root }} ${{ inputs.env-user }}@${{ inputs.env-host }}:${{ inputs.env-remote-root }}
+      shell: bash
