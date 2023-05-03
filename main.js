@@ -25,7 +25,7 @@
 	excludes = [];
 
   if ( consistencyCheck ) {
-	console.log( '# Running consistency check.' );
+	console.log( '# Running consistency check. :ghost:' );
   }
 
   if (shellParams) {
@@ -118,7 +118,7 @@
 	  }
 
 	  if ( consistencyCheck && processedFiles > 0 ) {
-		core.setFailed('Consistency check failed. Files differ while running RSync without a Manifest file.');
+		core.setFailed('Pre-push consistency check failed. Target filesystem does not match build directory.');
 	  }
 	},
 	function (data) {
