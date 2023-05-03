@@ -24,6 +24,10 @@
   let includes = [],
 	excludes = [];
 
+  if ( consistencyCheck ) {
+	console.log( '# Running consistency check.' );
+  }
+
   if (shellParams) {
 	shellParams = shellParams.split(' ');
   } else {
