@@ -45,6 +45,10 @@ inputs:
     description: ""
     required: false
     default: ''
+  manifest:
+    description: "The path to the manifest file to use with the --files-from rsync param"
+    required: false
+    default: ''
 runs:
   using: 'node16'
   main: 'main.js'
