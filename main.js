@@ -39,7 +39,9 @@
   } else {
 	extraOptions = [
 		'delete',
-		'no-inc-recursive'
+		'no-inc-recursive',
+		'size-only',
+		'ignore-times'
 	];
   }
 
