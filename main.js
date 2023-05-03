@@ -14,7 +14,7 @@
   let sshFlags = core.getInput('ssh-flags', { require: true });
   let extraOptions = core.getInput('ssh-extra-options', { required: false });
   let localRoot = core.getInput('env-local-root', { required: true });
-  let remoteRoot = core.getInput('env-local-root', { required: true });
+  let remoteRoot = core.getInput('env-remote-root', { required: true });
   let manifest = core.getInput('manifest', { required: false });
 
   // Make sure paths end with a slash.
