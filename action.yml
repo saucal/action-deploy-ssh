@@ -32,15 +32,15 @@ inputs:
   ssh-flags:
     description: "SSH Flags to pass to the RSync command"
     required: false
-    default: 'azvrn'
+    default: 'avrcz'
   ssh-shell-params:
     description: "Parameters to be passed to the SSH shell command"
     required: false
-    default: ''
+    default: '-oStrictHostKeyChecking=no'
   ssh-extra-options:
     description: "Extra options for the RSync command"
     required: false
-    default: ''
+    default: 'delete no-inc-recursive size-only ignore-times omit-dir-times no-perms no-owner no-group'
   consistency-check:
     description: ""
     required: false

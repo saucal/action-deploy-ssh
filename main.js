@@ -30,29 +30,16 @@
 	console.log( '::group::Running rsync.' );
   }
 
-  if (shellParams) {
-	shellParams = shellParams.split(' ');
-  } else {
-	shellParams = ['-oStrictHostKeyChecking=no'];
-  }
+  shellParams = shellParams.split(' ');
+  extraOptions = extraOptions.split(' ');
 
   if (remotePort) {
 	shellParams.push('-p ' + remotePort);
   }
 
-  if (extraOptions) {
-	extraOptions = extraOptions.split(' ');
-  } else {
-	extraOptions = [
-		'delete',
-		'no-inc-recursive',
-		'size-only',
-		'ignore-times'
-	];
-  }
-
   if ( manifest ) {
 	extraOptions.push( '--files-from=' + manifest );
+	extraOptions.push( 'delete-missing-args' );
   }
 
   if (ignoreList) {
