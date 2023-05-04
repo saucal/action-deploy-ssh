@@ -36,7 +36,7 @@ inputs:
   ssh-shell-params:
     description: "Parameters to be passed to the SSH shell command"
     required: false
-    default: '-oStrictHostKeyChecking=no'
+    default: ''
   ssh-extra-options:
     description: "Extra options for the RSync command"
     required: false
