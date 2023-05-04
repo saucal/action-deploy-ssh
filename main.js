@@ -10,9 +10,9 @@
   const consistencyCheck = core.getInput('consistency-check', { required: false });
 
   let ignoreList = core.getInput('force-ignore', { required: false });
-  let shellParams = core.getInput('ssh-shell-params', { required: false });
+  let shellParams = core.getInput('ssh-shell-params', { required: true });
   let sshFlags = core.getInput('ssh-flags', { require: true });
-  let extraOptions = core.getInput('ssh-extra-options', { required: false });
+  let extraOptions = core.getInput('ssh-extra-options', { required: true });
   let localRoot = core.getInput('env-local-root', { required: true });
   let remoteRoot = core.getInput('env-remote-root', { required: true });
   let manifest = core.getInput('manifest', { required: false });
