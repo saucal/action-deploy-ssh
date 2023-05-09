@@ -31,6 +31,11 @@
 	console.log( '::group::Running rsync.' );
   }
 
+  // Set defaults.
+  sshFlags = '' !== sshFlags ? sshFlags : 'avrcz';
+  extraOptions = '' !== extraOptions ? extraOptions : 'delete no-inc-recursive size-only ignore-times omit-dir-times no-perms no-owner no-group';
+  
+
   shellParams = shellParams.split(' ');
   extraOptions = extraOptions.split(' ');
 
@@ -65,12 +70,15 @@
   }
 
   var rsync = new Rsync()
-	.shell('ssh ' + shellParams.join(' '))
 	.flags( sshFlags )
 	.source( localRoot )
 	.destination(
 	  remoteTarget + ':' + remoteRoot
 	);
+
+  if ( shellParams.length > 0 ) {
+	rsync.shell('ssh ' + shellParams.join(' '));
+  }
 
   for (let i = 0; i < extraOptions.length; i++) {
     rsync.set(extraOptions[i]);

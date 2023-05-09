@@ -32,7 +32,7 @@ inputs:
   ssh-flags:
     description: "SSH Flags to pass to the RSync command"
     required: false
-    default: 'avrcz'
+    default: ''
   ssh-shell-params:
     description: "Parameters to be passed to the SSH shell command"
     required: false
@@ -40,7 +40,7 @@ inputs:
   ssh-extra-options:
     description: "Extra options for the RSync command"
     required: false
-    default: 'delete no-inc-recursive size-only ignore-times omit-dir-times no-perms no-owner no-group'
+    default: ''
   consistency-check:
     description: ""
     required: false
