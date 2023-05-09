@@ -101,7 +101,7 @@
   rsync.execute(
 	function (error, code, cmd) {
 	  // we're done
-	  if (code != 0) {
+	  if (code != 0 && code != 24) { // 24 is the code for "some files vanished while we were building the file list" See https://rsync.samba.org/FAQ.html#10
 		console.error('rsync error: ' + error);
 		console.error('rsync code: ' + code);
 		core.setFailed('rsync failed with code ' + code);
