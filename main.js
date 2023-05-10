@@ -7,13 +7,14 @@
 	'@' +
 	core.getInput('env-host', { required: true });
   const remotePort = core.getInput('env-port', { required: false });
+  const sshKey = core.getInput('env-key', { required: false });
+  const sshPass = core.getInput('env-pass', { required: false });
   const consistencyCheck = core.getInput('consistency-check', { required: false });
 
   let ignoreList = core.getInput('force-ignore', { required: false });
   let shellParams = core.getInput('ssh-shell-params', { required: false });
   let sshFlags = core.getInput('ssh-flags', { require: true });
   let extraOptions = core.getInput('ssh-extra-options', { required: false });
-  console.log( 'extraOptions: ' + extraOptions );
   let localRoot = core.getInput('env-local-root', { required: true });
   let remoteRoot = core.getInput('env-remote-root', { required: true });
   let manifest = core.getInput('manifest', { required: false });
@@ -25,6 +26,11 @@
   let includes = [],
 	excludes = [];
 
+  if ( '' === sshKey && '' === sshPass ) {
+	core.setFailed('You need to provide either an SSH password or an SSH key');
+	return;
+  }
+
   if ( consistencyCheck ) {
 	console.log( '::group::Running consistency check.' );
   } else {
@@ -34,10 +40,10 @@
   // Set defaults.
   sshFlags = '' !== sshFlags ? sshFlags : 'avrcz';
   extraOptions = '' !== extraOptions ? extraOptions : 'delete no-inc-recursive size-only ignore-times omit-dir-times no-perms no-owner no-group';
-  
 
   shellParams = shellParams.split(' ');
   extraOptions = extraOptions.split(' ');
+  shell = sshPass ? 'sshpass -p ' + sshPass + ' ssh' : 'ssh';
 
   if (remotePort) {
 	shellParams.push('-p ' + remotePort);
@@ -77,7 +83,7 @@
 	);
 
   if ( shellParams.length > 0 ) {
-	rsync.shell('ssh ' + shellParams.join(' '));
+	rsync.shell( shell + ' ' + shellParams.join(' '));
   }
 
   for (let i = 0; i < extraOptions.length; i++) {
@@ -131,6 +137,5 @@
 	  console.error(data.toString());
 	}
   );
-
 
 })();

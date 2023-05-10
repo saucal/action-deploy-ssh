@@ -15,7 +15,11 @@ inputs:
     default: ''
   env-key:
     description: "Env SSH Key"
-    required: true
+    required: false
+    default: ''
+  env-pass:
+    description: "Env Password"
+    required: false
     default: ''
   env-remote-root:
     description: "Env Remote Root"
