@@ -43,7 +43,7 @@
 
   shellParams = shellParams.split(' ');
   extraOptions = extraOptions.split(' ');
-  shell = sshPass ? 'sshpass -p ' + sshPass + ' ssh' : 'ssh';
+  shell = sshPass ? 'sshpass -p \'' + sshPass + '\' ssh' : 'ssh';
 
   if (remotePort) {
 	shellParams.push('-p ' + remotePort);
