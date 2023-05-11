@@ -61,6 +61,7 @@
 	if ( manifest ) {
 		extraOptions.push( '--files-from=' + manifest );
 		extraOptions.push( 'delete-missing-args' );
+		extraOptions.push( 'delete-after' );
 	}
 
 	if ( ignoreList ) {
