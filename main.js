@@ -62,6 +62,11 @@
     
     ignoreList[i] = ignoreList[i].trim();
 
+    // Skip empty lines
+    if (ignoreList[i].length === 0) {
+      continue;
+    }
+
     if (ignoreList[i].startsWith('#')) {
       continue; // Its a comment.
     }
