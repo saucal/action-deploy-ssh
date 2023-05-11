@@ -59,10 +59,17 @@
 	ignoreList = ignoreList.split('\n');
 
 	for (let i = 0; i < ignoreList.length; i++) {
-	  // If starts with a !, include
+    
+    ignoreList[i] = ignoreList[i].trim();
+
+    if (ignoreList[i].startsWith('#')) {
+      continue; // Its a comment.
+    }
+
+    // If starts with a !, include
 	  if (ignoreList[i].startsWith('!')) {
-		includes.push(ignoreList[i].substr(1, ignoreList[i].length - 1));
-		continue;
+  		includes.push(ignoreList[i].substring(1));
+		  continue;
 	  }
 
 	  // Otherwise, exclude
