@@ -48,7 +48,7 @@
 	extraOptions =
 		'' !== extraOptions
 			? extraOptions
-			: 'delete no-inc-recursive size-only ignore-times omit-dir-times no-perms no-owner no-group prune-empty-dirs no-dirs';
+			: 'delete no-inc-recursive size-only ignore-times omit-dir-times no-perms no-owner no-group no-dirs';
 
 	shellParams = shellParams.split( ' ' );
 	extraOptions = extraOptions.split( ' ' );
