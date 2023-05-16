@@ -112,6 +112,7 @@
 	if ( consistencyCheck ) {
 		rsync.set( 'dry-run' );
 		rsync.set( 'info', 'NAME' );
+		rsync.set( 'old-args' );
 	}
 
 	if ( includes.length > 0 ) {
