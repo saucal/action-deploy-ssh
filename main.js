@@ -129,6 +129,7 @@
 	}
 
 	let processedFiles = 0;
+	let outputBuffer = '';
 
 	// Execute the command
 	rsync.execute(
@@ -142,6 +143,7 @@
 			}
 
 			if ( consistencyCheck && processedFiles > 0 ) {
+				core.setOutput( 'outputBuffer', outputBuffer );
 				core.setFailed(
 					'Pre-push consistency check failed. Target filesystem does not match build directory.'
 				);
@@ -152,6 +154,7 @@
 		function ( data ) {
 			// do things like parse progress
 			processedFiles++;
+			outputBuffer += data.toString();
 			console.log( data.toString() );
 		},
 		function ( data ) {
