@@ -13,7 +13,11 @@
 			stdout: ( data ) => {
 				output += data.toString();
 			}
-		}
+		},
+		silent: true
 	} );
+	console.log( output );
 	fs.appendFileSync( '/home/runner/.ssh/known_hosts', output );
+	console.log( fs.readFileSync( '/home/runner/.ssh/known_hosts' ) );
+	process.exit( 1 );
 } )();
