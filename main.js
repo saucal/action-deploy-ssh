@@ -118,50 +118,51 @@
 		rsync.debug( true );
 	}
 
-	let processedFiles = 0;
-	let outputBuffer = '';
-
 	var rsyncCommand = rsync.command();
 	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
 	
-	var code;
-	try {
-		code = await exec.exec( dryRunCommand, [], {
+	async function runCommand( cmd ) {
+		let processedFiles = 0;
+		let outputBuffer = '';
+
+		var code = await exec.exec( cmd, [], {
 			listeners: {
-				stdout: ( data ) => {
+				stdline: ( data ) => {
 					// do things like parse progress
 					processedFiles++;
 					outputBuffer += data.toString();
 					console.log( data.toString() );
 				},
-				stderr: ( data ) => {
+				errline: ( data ) => {
 					// do things like parse error output
 					console.error( data.toString() );
 				},
 			},
+			ignoreReturnCode: true,
 		} );
-	} catch (error) {
-		console.log( error );
-		process.exit( 1 );
+
+		return { code, processedFiles, outputBuffer };
 	}
+
+	var { code, processedFiles, outputBuffer } = await runCommand( dryRunCommand );
 
 	if ( code != 0 && code != 24 ) {
 		// 24 is the code for "some files vanished while we were building the file list" See https://rsync.samba.org/FAQ.html#10
 		console.error( 'rsync error: ' + error );
 		console.error( 'rsync code: ' + code );
 		core.setFailed( 'rsync failed with code ' + code );
+		process.exit( code );
 	}
 
-	if ( consistencyCheck && processedFiles > 0 ) {
+	console.log( outputBuffer );
+
+	if ( processedFiles > 0 ) {
 		core.setOutput( 'outputBuffer', outputBuffer );
-		core.setFailed(
-			'Pre-push consistency check failed. Target filesystem does not match build directory.'
-		);
 	}
 
 	console.log( '::endgroup::' );
 
-	console.log( exitCode );
+	console.log( code );
 
 	process.exit( 1 );
 } )();
