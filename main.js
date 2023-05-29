@@ -128,6 +128,7 @@
 					outputBuffer += data.toString() + '\n';
 				},
 			},
+			outStream: fs.createWriteStream( '/dev/null' ),
 			ignoreReturnCode: true,
 		} );
 
