@@ -30,4 +30,9 @@
 		await exec.exec( 'chmod', ['600', keyPath] );
 		await exec.exec( 'ssh-add', [keyPath] );
 	}
+
+	const remotePass = core.getInput( 'env-pass', { required: false } );
+	if( remotePass != '' ) {
+		await exec.exec( 'sudo', ['apt-get', 'install', '-y', 'sshpass'] );
+	}
 } )();
