@@ -146,18 +146,17 @@
 		return { code, processedFiles, outputBuffer };
 	}
 
-	var { code, processedFiles, outputBuffer } = await runCommand( dryRunCommand );
-	console.log( '::endgroup::' );
-
-	var i = 0, bufferPath;
-	do {
-		i++;
-		bufferPath = '/tmp/rsync_output_buffer_' + i;
-	} while	( fs.existsSync( bufferPath ) );
-	if ( processedFiles > 0 ) {
+	function writeBufferToFile( outputBuffer ) {
+		var i = 0, bufferPath;
+		do {
+			i++;
+			bufferPath = '/tmp/rsync_output_buffer_' + i;
+		} while	( fs.existsSync( bufferPath ) );
 		fs.writeFileSync( bufferPath, outputBuffer );
-		core.setOutput( 'outputBuffer', bufferPath );
+		return bufferPath;
 	}
+
+	var { code, processedFiles, outputBuffer } = await runCommand( dryRunCommand );
 
 	if ( consistencyCheck ) {
 		var actionExitCode = 0
@@ -170,27 +169,21 @@
 		process.exit( actionExitCode );
 	}
 
-	console.log( processedFiles + ' files to sync.' );
-
-	console.log( code );
-
-	console.log( {
-		PATH_DIR: localRoot,
-		SSH_IGNORE_LIST: ignoreListRaw,
-		GIT_MANIFEST: manifest,
-		RSYNC_MANIFEST: bufferPath,
-		GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
-	} );
-
-	await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
+	var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
 		env: {
 			PATH_DIR: localRoot,
 			SSH_IGNORE_LIST: ignoreListRaw,
 			GIT_MANIFEST: manifest,
-			RSYNC_MANIFEST: bufferPath,
+			RSYNC_MANIFEST: writeBufferToFile( outputBuffer ),
 			GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 		},
+		ignoreReturnCode: true,
 	} );
 
-	process.exit( 1 );
+	if ( code != 0 ) {
+		process.exit( code );
+	}
+
+	var { code, processedFiles, outputBuffer } = await runCommand( rsyncCommand );
+	console.log( '::endgroup::' );
 } )();
