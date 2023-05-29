@@ -118,14 +118,14 @@
 		rsync.debug( true );
 	}
 
+	let processedFiles = 0;
+	let outputBuffer = '';
+
 	var rsyncCommand = rsync.command();
 	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
 	console.log( rsyncCommand );
 	console.log( dryRunCommand );
 	process.exit( 1 );
-
-	let processedFiles = 0;
-	let outputBuffer = '';
 
 	// Execute the command
 	rsync.execute(
