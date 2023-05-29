@@ -123,8 +123,29 @@
 
 	var rsyncCommand = rsync.command();
 	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
-	console.log( rsyncCommand );
-	console.log( dryRunCommand );
+	
+	var exitCode;
+	try {
+		exitCode = await exec.exec( dryRunCommand, [], {
+			listeners: {
+				stdout: ( data ) => {
+					// do things like parse progress
+					processedFiles++;
+					outputBuffer += data.toString();
+					console.log( data.toString() );
+				},
+				stderr: ( data ) => {
+					// do things like parse error output
+					console.error( data.toString() );
+				},
+			},
+		} );
+	} catch (error) {
+		console.log( error );
+	}
+
+	console.log( exitCode );
+
 	process.exit( 1 );
 
 	// Execute the command
