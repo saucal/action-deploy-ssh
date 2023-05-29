@@ -117,6 +117,17 @@
 	var rsyncCommand = rsync.command();
 	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
 	
+
+	function writeBufferToFile( outputBuffer ) {
+		var i = 0, bufferPath;
+		do {
+			i++;
+			bufferPath = '/tmp/rsync_output_buffer_' + i;
+		} while	( fs.existsSync( bufferPath ) );
+		fs.writeFileSync( bufferPath, outputBuffer );
+		return bufferPath;
+	}
+
 	async function runCommand( cmd ) {
 		let processedFiles = 0;
 		let outputBuffer = '';
@@ -143,20 +154,12 @@
 			process.exit( code );
 		}
 
-		return { code, processedFiles, outputBuffer };
+		let bufferPath = writeBufferToFile( outputBuffer );
+
+		return { code, processedFiles, bufferPath };
 	}
 
-	function writeBufferToFile( outputBuffer ) {
-		var i = 0, bufferPath;
-		do {
-			i++;
-			bufferPath = '/tmp/rsync_output_buffer_' + i;
-		} while	( fs.existsSync( bufferPath ) );
-		fs.writeFileSync( bufferPath, outputBuffer );
-		return bufferPath;
-	}
-
-	var { code, processedFiles, outputBuffer } = await runCommand( dryRunCommand );
+	var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
 
 	if ( consistencyCheck ) {
 		var actionExitCode = 0
@@ -174,7 +177,7 @@
 			PATH_DIR: localRoot,
 			SSH_IGNORE_LIST: ignoreListRaw,
 			GIT_MANIFEST: manifest,
-			RSYNC_MANIFEST: writeBufferToFile( outputBuffer ),
+			RSYNC_MANIFEST: bufferPath,
 			GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 		},
 		ignoreReturnCode: true,
@@ -184,6 +187,6 @@
 		process.exit( code );
 	}
 
-	var { code, processedFiles, outputBuffer } = await runCommand( rsyncCommand );
+	var { code, processedFiles, bufferPath } = await runCommand( rsyncCommand );
 	console.log( '::endgroup::' );
 } )();
