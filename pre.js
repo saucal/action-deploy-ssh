@@ -16,8 +16,17 @@
 		},
 		silent: true
 	} );
+	
+	console.log( 'KeyScan output' );
+	console.log( 'type' );
+	console.log( typeof output );
+	console.log( 'output string' );
 	console.log( output.toString() );
+	console.log( 'original file' );
+	console.log( fs.readFileSync( '/home/runner/.ssh/known_hosts' ).toString() );
+	console.log( 'writing file' );
 	fs.appendFileSync( '/home/runner/.ssh/known_hosts', output.toString() );
-	console.log( fs.readFileSync( '/home/runner/.ssh/known_hosts' ) );
+	console.log( 'new file' );
+	console.log( fs.readFileSync( '/home/runner/.ssh/known_hosts' ).toString() );
 	process.exit( 1 );
 } )();
