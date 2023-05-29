@@ -172,5 +172,14 @@
 
 	console.log( code );
 
+	await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
+		env: {
+			PATH_DIR: localRoot,
+			SSH_IGNORE_LIST: ignoreListRaw,
+			GIT_MANIFEST: manifest,
+			RSYNC_MANIFEST: bufferPath,
+		},
+	} );
+
 	process.exit( 1 );
 } )();
