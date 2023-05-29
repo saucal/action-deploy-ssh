@@ -16,7 +16,8 @@
 		const sock = '/tmp/ssh_agent.sock';
 		if( ! fs.existsSync( sock ) ) {
 			core.exportVariable( 'SSH_AUTH_SOCK', sock );
-			await exec.exec( 'ssh-agent', ['-a', sock], { silent: true } );
+			process.env['SSH_AUTH_SOCK'] = sock;
+			await exec.exec( 'ssh-agent', ['-a', sock] );
 		}
 
 		var i = 0;
