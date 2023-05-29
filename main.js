@@ -1,5 +1,6 @@
 ( async function () {
 	const core = require( '@actions/core' );
+	const exec = require( '@actions/exec' );
 	const Rsync = require( 'rsync' );
 
 	const remoteTarget =
@@ -92,11 +93,6 @@
 		}
 	}
 
-	if ( consistencyCheck ) {
-		// Remove verbose flag from sshFlags.
-		sshFlags = sshFlags.replace( 'v', '' );
-	}
-
 	var rsync = new Rsync()
 		.flags( sshFlags )
 		.source( localRoot )
@@ -108,11 +104,6 @@
 
 	for ( let i = 0; i < extraOptions.length; i++ ) {
 		rsync.set( extraOptions[ i ] );
-	}
-
-	if ( consistencyCheck ) {
-		rsync.set( 'dry-run' );
-		rsync.set( 'info', 'NAME' );
 	}
 
 	if ( includes.length > 0 ) {
@@ -127,9 +118,10 @@
 		rsync.debug( true );
 	}
 
-	console.log(consistencyCheck);
-	console.log( rsync.command() );
-
+	var rsyncCommand = rsync.command();
+	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
+	console.log( rsyncCommand );
+	console.log( dryRunCommand );
 	process.exit( 1 );
 
 	let processedFiles = 0;
