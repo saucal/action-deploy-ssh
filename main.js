@@ -123,11 +123,14 @@
 		rsync.exclude( excludes );
 	}
 
-	console.log( rsync.command() );
-
 	if ( core.isDebug() ) {
 		rsync.debug( true );
 	}
+
+	console.log(consistencyCheck);
+	console.log( rsync.command() );
+
+	process.exit( 1 );
 
 	let processedFiles = 0;
 	let outputBuffer = '';
