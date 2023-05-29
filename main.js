@@ -14,6 +14,7 @@
 	const consistencyCheck = core.getInput( 'consistency-check', { required: false } );
 
 	let ignoreList = core.getInput( 'force-ignore', { required: false } );
+	let ignoreListRaw = ignoreList;
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
 	let extraOptions = core.getInput( 'ssh-extra-options', {
@@ -144,18 +145,16 @@
 	}
 
 	var { code, processedFiles, outputBuffer } = await runCommand( dryRunCommand );
+	console.log( '::endgroup::' );
 
-	var i = 0;
-	var keyPath;
+	var i = 0, bufferPath;
 	do {
 		i++;
-		keyPath = '/tmp/rsync_output_buffer_' + i;
-	} while	( fs.existsSync( keyPath ) );
+		bufferPath = '/tmp/rsync_output_buffer_' + i;
+	} while	( fs.existsSync( bufferPath ) );
 	if ( processedFiles > 0 ) {
-		console.log( 'length of ob:', outputBuffer.length )
-		fs.writeFileSync( keyPath, outputBuffer );
-		console.log( 'length of file written:', fs.statSync( keyPath ).size );
-		core.setOutput( 'outputBuffer', keyPath );
+		fs.writeFileSync( bufferPath, outputBuffer );
+		core.setOutput( 'outputBuffer', bufferPath );
 	}
 
 	if ( consistencyCheck ) {
@@ -166,11 +165,8 @@
 			);
 			actionExitCode = 1;
 		}
-		console.log( '::endgroup::' );
 		process.exit( actionExitCode );
 	}
-
-	console.log( '::endgroup::' );
 
 	console.log( processedFiles + ' files to sync.' );
 
