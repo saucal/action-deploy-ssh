@@ -179,6 +179,7 @@
 		SSH_IGNORE_LIST: ignoreListRaw,
 		GIT_MANIFEST: manifest,
 		RSYNC_MANIFEST: bufferPath,
+		GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 	} );
 
 	await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
@@ -187,6 +188,7 @@
 			SSH_IGNORE_LIST: ignoreListRaw,
 			GIT_MANIFEST: manifest,
 			RSYNC_MANIFEST: bufferPath,
+			GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 		},
 	} );
 
