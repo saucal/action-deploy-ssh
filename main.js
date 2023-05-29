@@ -147,6 +147,11 @@
 		core.setOutput( 'outputBuffer', outputBuffer );
 	}
 
+	if ( consistencyCheck ) {
+		console.log( '::endgroup::' );
+		process.exit( 0 );
+	}
+
 	console.log( '::endgroup::' );
 
 	console.log( code );
