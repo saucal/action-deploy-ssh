@@ -53,6 +53,9 @@
 	shellParams = shellParams.split( ' ' );
 	extraOptions = extraOptions.split( ' ' );
 	shell = sshPass ? 'sshpass -e ssh' : 'ssh';
+	if( sshPass ) {
+		process.env['SSHPASS'] = sshPass;
+	}
 
 	if ( remotePort ) {
 		shellParams.push( '-p ' + remotePort );
