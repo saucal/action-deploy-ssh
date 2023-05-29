@@ -124,9 +124,9 @@
 	var rsyncCommand = rsync.command();
 	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
 	
-	var exitCode;
+	var code;
 	try {
-		exitCode = await exec.exec( dryRunCommand, [], {
+		code = await exec.exec( dryRunCommand, [], {
 			listeners: {
 				stdout: ( data ) => {
 					// do things like parse progress
@@ -142,41 +142,26 @@
 		} );
 	} catch (error) {
 		console.log( error );
+		process.exit( 1 );
 	}
+
+	if ( code != 0 && code != 24 ) {
+		// 24 is the code for "some files vanished while we were building the file list" See https://rsync.samba.org/FAQ.html#10
+		console.error( 'rsync error: ' + error );
+		console.error( 'rsync code: ' + code );
+		core.setFailed( 'rsync failed with code ' + code );
+	}
+
+	if ( consistencyCheck && processedFiles > 0 ) {
+		core.setOutput( 'outputBuffer', outputBuffer );
+		core.setFailed(
+			'Pre-push consistency check failed. Target filesystem does not match build directory.'
+		);
+	}
+
+	console.log( '::endgroup::' );
 
 	console.log( exitCode );
 
 	process.exit( 1 );
-
-	// Execute the command
-	rsync.execute(
-		function ( error, code, cmd ) {
-			// we're done
-			if ( code != 0 && code != 24 ) {
-				// 24 is the code for "some files vanished while we were building the file list" See https://rsync.samba.org/FAQ.html#10
-				console.error( 'rsync error: ' + error );
-				console.error( 'rsync code: ' + code );
-				core.setFailed( 'rsync failed with code ' + code );
-			}
-
-			if ( consistencyCheck && processedFiles > 0 ) {
-				core.setOutput( 'outputBuffer', outputBuffer );
-				core.setFailed(
-					'Pre-push consistency check failed. Target filesystem does not match build directory.'
-				);
-			}
-
-			console.log( '::endgroup::' );
-		},
-		function ( data ) {
-			// do things like parse progress
-			processedFiles++;
-			outputBuffer += data.toString();
-			console.log( data.toString() );
-		},
-		function ( data ) {
-			// do things like parse error output
-			console.error( data.toString() );
-		}
-	);
 } )();
