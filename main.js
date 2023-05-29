@@ -9,9 +9,7 @@
 	const remotePort = core.getInput( 'env-port', { required: false } );
 	const sshKey = core.getInput( 'env-key', { required: false } );
 	const sshPass = core.getInput( 'env-pass', { required: false } );
-	const consistencyCheck = core.getInput( 'consistency-check', {
-		required: false,
-	} );
+	const consistencyCheck = core.getInput( 'consistency-check', { required: false } );
 
 	let ignoreList = core.getInput( 'force-ignore', { required: false } );
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
