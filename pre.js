@@ -26,7 +26,7 @@
 			keyPath = '/home/runner/.ssh/github_actions_' + i;
 		} while	( fs.existsSync( keyPath ) );
 
-		fs.writeFileSync( keyPath, remoteKey );
+		await exec.exec( 'bash', ['-c', 'echo "' + remoteKey + '" > ' + keyPath ] );
 		await exec.exec( 'chmod', ['600', keyPath] );
 		await exec.exec( 'ssh-add', [keyPath] );
 	}
