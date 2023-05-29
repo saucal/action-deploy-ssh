@@ -9,4 +9,24 @@
 	const remotePort = core.getInput( 'env-port', { required: false } );
 
 	await exec.exec( 'bash', ['-c', 'ssh-keyscan -p "' + remotePort + '" -H "' + remoteHost + '" >> /home/runner/.ssh/known_hosts' ] );
+
+	const remoteKey = core.getInput( 'env-key', { required: false } );
+	if( remoteKey != '' ) {
+		const sock = '/tmp/ssh_agent.sock';
+		if( ! fs.existsSync( sock ) ) {
+			core.exportVariable( 'SSH_AUTH_SOCK', sock );
+			await exec.exec( 'ssh-agent', ['-a', sock], { silent: true } );
+		}
+
+		var i = 0;
+		var keyPath;
+		do {
+			i++;
+			keyPath = '/home/runner/.ssh/github_actions_' + i;
+		} while	( fs.existsSync( keyPath ) );
+
+		fs.writeFileSync( keyPath, remoteKey );
+		await exec.exec( 'chmod', ['600', keyPath] );
+		await exec.exec( 'ssh-add', [keyPath] );
+	}
 } )();
