@@ -121,6 +121,8 @@
 		let processedFiles = 0;
 		let outputBuffer = '';
 
+		console.log( cmd );
+
 		var code = await exec.exec( cmd, [], {
 			listeners: {
 				stdline: ( data ) => {
