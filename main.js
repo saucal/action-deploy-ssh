@@ -1,6 +1,7 @@
 ( async function () {
 	const core = require( '@actions/core' );
 	const exec = require( '@actions/exec' );
+	const fs = require( 'fs' );
 	const Rsync = require( 'rsync' );
 
 	const remoteTarget =
@@ -143,8 +144,16 @@
 
 	var { code, processedFiles, outputBuffer } = await runCommand( dryRunCommand );
 
+	var i = 0;
+	var keyPath;
+	do {
+		i++;
+		keyPath = '/tmp/rsync_output_buffer_' + i;
+	} while	( fs.existsSync( keyPath ) );
 	if ( processedFiles > 0 ) {
-		core.setOutput( 'outputBuffer', outputBuffer );
+		console.log( 'length of ob:', outputBuffer.length )
+		fs.writeFileSync( keyPath, outputBuffer );
+		core.setOutput( 'outputBuffer', keyPath );
 	}
 
 	if ( consistencyCheck ) {
