@@ -148,8 +148,15 @@
 	}
 
 	if ( consistencyCheck ) {
+		var actionExitCode = 0
+		if( processedFiles > 0 ) {
+			core.setFailed(
+				'Pre-push consistency check failed. Target filesystem does not match build directory.'
+			);
+			actionExitCode = 1;
+		}
 		console.log( '::endgroup::' );
-		process.exit( 0 );
+		process.exit( actionExitCode );
 	}
 
 	console.log( '::endgroup::' );
