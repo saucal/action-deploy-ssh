@@ -11,7 +11,6 @@
 	await exec.exec( 'bash', ['-c', 'ssh-keyscan -p "' + remotePort + '" -H "' + remoteHost + '" >> /home/runner/.ssh/known_hosts' ] );
 
 	const remoteKey = core.getInput( 'env-key', { required: false } );
-	console.log( 'remoteKey: ' + remoteKey );
 	if( remoteKey != '' ) {
 		const sock = '/tmp/ssh_agent.sock';
 		if( ! fs.existsSync( sock ) ) {
