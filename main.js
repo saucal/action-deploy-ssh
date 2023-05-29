@@ -154,6 +154,7 @@
 	if ( processedFiles > 0 ) {
 		console.log( 'length of ob:', outputBuffer.length )
 		fs.writeFileSync( keyPath, outputBuffer );
+		console.log( 'length of file written:', fs.statSync( keyPath ).size );
 		core.setOutput( 'outputBuffer', keyPath );
 	}
 
