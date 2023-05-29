@@ -136,20 +136,18 @@
 			ignoreReturnCode: true,
 		} );
 
+		if ( code != 0 && code != 24 ) {
+			// 24 is the code for "some files vanished while we were building the file list" See https://rsync.samba.org/FAQ.html#10
+			console.error( 'rsync error: ' + error );
+			console.error( 'rsync code: ' + code );
+			core.setFailed( 'rsync failed with code ' + code );
+			process.exit( code );
+		}
+
 		return { code, processedFiles, outputBuffer };
 	}
 
 	var { code, processedFiles, outputBuffer } = await runCommand( dryRunCommand );
-
-	if ( code != 0 && code != 24 ) {
-		// 24 is the code for "some files vanished while we were building the file list" See https://rsync.samba.org/FAQ.html#10
-		console.error( 'rsync error: ' + error );
-		console.error( 'rsync code: ' + code );
-		core.setFailed( 'rsync failed with code ' + code );
-		process.exit( code );
-	}
-
-	console.log( outputBuffer );
 
 	if ( processedFiles > 0 ) {
 		core.setOutput( 'outputBuffer', outputBuffer );
