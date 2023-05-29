@@ -130,12 +130,7 @@
 				stdline: ( data ) => {
 					// do things like parse progress
 					processedFiles++;
-					outputBuffer += data.toString();
-					console.log( 1, data.toString() );
-				},
-				errline: ( data ) => {
-					// do things like parse error output
-					console.error( data.toString() );
+					outputBuffer += data.toString() + '\n';
 				},
 			},
 			ignoreReturnCode: true,
@@ -154,7 +149,7 @@
 		process.exit( code );
 	}
 
-	console.log( 2, outputBuffer );
+	console.log( outputBuffer );
 
 	if ( processedFiles > 0 ) {
 		core.setOutput( 'outputBuffer', outputBuffer );
