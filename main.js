@@ -161,6 +161,8 @@
 
 	console.log( '::endgroup::' );
 
+	console.log( processedFiles + ' files to sync.' );
+
 	console.log( code );
 
 	process.exit( 1 );
