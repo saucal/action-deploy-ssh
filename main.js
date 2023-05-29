@@ -60,12 +60,6 @@
 		shellParams.push( '-p ' + remotePort );
 	}
 
-	if ( manifest ) {
-		extraOptions.push( '--files-from=' + manifest );
-		extraOptions.push( 'delete-missing-args' );
-		extraOptions.push( 'delete-after' );
-	}
-
 	if ( ignoreList ) {
 		// Split ignore list by newlines
 		ignoreList = ignoreList.split( '\n' );
