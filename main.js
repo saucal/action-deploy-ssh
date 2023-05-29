@@ -131,7 +131,7 @@
 					// do things like parse progress
 					processedFiles++;
 					outputBuffer += data.toString();
-					console.log( data.toString() );
+					console.log( 1, data.toString() );
 				},
 				errline: ( data ) => {
 					// do things like parse error output
@@ -154,7 +154,7 @@
 		process.exit( code );
 	}
 
-	console.log( outputBuffer );
+	console.log( 2, outputBuffer );
 
 	if ( processedFiles > 0 ) {
 		core.setOutput( 'outputBuffer', outputBuffer );
