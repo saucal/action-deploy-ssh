@@ -159,32 +159,39 @@
 		return { code, processedFiles, bufferPath };
 	}
 
-	var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
+	// If we are doing just a consistency check, or we have a manifest to check against, run the dry-run command first.
+	if ( consistencyCheck || manifest != '' ) {
+		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
 
-	if ( consistencyCheck ) {
-		var actionExitCode = 0
-		if( processedFiles > 0 ) {
-			core.setFailed(
-				'Pre-push consistency check failed. Target filesystem does not match build directory.'
-			);
-			actionExitCode = 1;
+		// If we have the consistency check to run, check that there's no files changed.
+		if ( consistencyCheck ) {
+			var actionExitCode = 0
+			if( processedFiles > 0 ) {
+				core.setFailed(
+					'Pre-push consistency check failed. Target filesystem does not match build directory.'
+				);
+				actionExitCode = 1;
+			}
+			process.exit( actionExitCode );
 		}
-		process.exit( actionExitCode );
-	}
 
-	var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
-		env: {
-			PATH_DIR: localRoot,
-			SSH_IGNORE_LIST: ignoreListRaw,
-			GIT_MANIFEST: manifest,
-			RSYNC_MANIFEST: bufferPath,
-			GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
-		},
-		ignoreReturnCode: true,
-	} );
-
-	if ( code != 0 ) {
-		process.exit( code );
+		// If we have a manifest file to check against, run the check-against-manifest.sh script.
+		if ( manifest != '' ) {
+			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
+				env: {
+					PATH_DIR: localRoot,
+					SSH_IGNORE_LIST: ignoreListRaw,
+					GIT_MANIFEST: manifest,
+					RSYNC_MANIFEST: bufferPath,
+					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+				},
+				ignoreReturnCode: true,
+			} );
+		
+			if ( code != 0 ) {
+				process.exit( code );
+			}
+		}
 	}
 
 	var { code, processedFiles, bufferPath } = await runCommand( rsyncCommand );
