@@ -1,5 +1,7 @@
 ( async function () {
 	const core = require( '@actions/core' );
+	const exec = require( '@actions/exec' );
+	const fs = require( 'fs' );
 	const Rsync = require( 'rsync' );
 
 	const remoteTarget =
@@ -9,11 +11,10 @@
 	const remotePort = core.getInput( 'env-port', { required: false } );
 	const sshKey = core.getInput( 'env-key', { required: false } );
 	const sshPass = core.getInput( 'env-pass', { required: false } );
-	const consistencyCheck = core.getInput( 'consistency-check', {
-		required: false,
-	} );
+	const consistencyCheck = core.getInput( 'consistency-check', { required: false } );
 
 	let ignoreList = core.getInput( 'force-ignore', { required: false } );
+	let ignoreListRaw = ignoreList;
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
 	let extraOptions = core.getInput( 'ssh-extra-options', {
@@ -53,15 +54,12 @@
 	shellParams = shellParams.split( ' ' );
 	extraOptions = extraOptions.split( ' ' );
 	shell = sshPass ? 'sshpass -e ssh' : 'ssh';
+	if( sshPass ) {
+		process.env['SSHPASS'] = sshPass;
+	}
 
 	if ( remotePort ) {
 		shellParams.push( '-p ' + remotePort );
-	}
-
-	if ( manifest ) {
-		extraOptions.push( '--files-from=' + manifest );
-		extraOptions.push( 'delete-missing-args' );
-		extraOptions.push( 'delete-after' );
 	}
 
 	if ( ignoreList ) {
@@ -91,11 +89,6 @@
 		}
 	}
 
-	if ( consistencyCheck ) {
-		// Remove verbose flag from sshFlags.
-		sshFlags = sshFlags.replace( 'v', '' );
-	}
-
 	var rsync = new Rsync()
 		.flags( sshFlags )
 		.source( localRoot )
@@ -109,11 +102,6 @@
 		rsync.set( extraOptions[ i ] );
 	}
 
-	if ( consistencyCheck ) {
-		rsync.set( 'dry-run' );
-		rsync.set( 'info', 'NAME' );
-	}
-
 	if ( includes.length > 0 ) {
 		rsync.include( includes );
 	}
@@ -122,44 +110,83 @@
 		rsync.exclude( excludes );
 	}
 
-	console.log( rsync.command() );
-
 	if ( core.isDebug() ) {
 		rsync.debug( true );
 	}
 
-	let processedFiles = 0;
-	let outputBuffer = '';
+	var rsyncCommand = rsync.command();
+	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
+	
 
-	// Execute the command
-	rsync.execute(
-		function ( error, code, cmd ) {
-			// we're done
-			if ( code != 0 && code != 24 ) {
-				// 24 is the code for "some files vanished while we were building the file list" See https://rsync.samba.org/FAQ.html#10
-				console.error( 'rsync error: ' + error );
-				console.error( 'rsync code: ' + code );
-				core.setFailed( 'rsync failed with code ' + code );
-			}
+	function writeBufferToFile( outputBuffer ) {
+		var i = 0, bufferPath;
+		do {
+			i++;
+			bufferPath = '/tmp/rsync_output_buffer_' + i;
+		} while	( fs.existsSync( bufferPath ) );
+		fs.writeFileSync( bufferPath, outputBuffer );
+		return bufferPath;
+	}
 
-			if ( consistencyCheck && processedFiles > 0 ) {
-				core.setOutput( 'outputBuffer', outputBuffer );
-				core.setFailed(
-					'Pre-push consistency check failed. Target filesystem does not match build directory.'
-				);
-			}
+	async function runCommand( cmd ) {
+		let processedFiles = 0;
+		let outputBuffer = '';
 
-			console.log( '::endgroup::' );
-		},
-		function ( data ) {
-			// do things like parse progress
-			processedFiles++;
-			outputBuffer += data.toString();
-			console.log( data.toString() );
-		},
-		function ( data ) {
-			// do things like parse error output
-			console.error( data.toString() );
+		console.log( cmd );
+
+		var code = await exec.exec( cmd, [], {
+			listeners: {
+				stdline: ( data ) => {
+					// do things like parse progress
+					processedFiles++;
+					outputBuffer += data.toString() + '\n';
+				},
+			},
+			outStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+
+		if ( code != 0 && code != 24 ) {
+			// 24 is the code for "some files vanished while we were building the file list" See https://rsync.samba.org/FAQ.html#10
+			console.error( 'rsync error: ' + error );
+			console.error( 'rsync code: ' + code );
+			core.setFailed( 'rsync failed with code ' + code );
+			process.exit( code );
 		}
-	);
+
+		let bufferPath = writeBufferToFile( outputBuffer );
+
+		return { code, processedFiles, bufferPath };
+	}
+
+	var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
+
+	if ( consistencyCheck ) {
+		var actionExitCode = 0
+		if( processedFiles > 0 ) {
+			core.setFailed(
+				'Pre-push consistency check failed. Target filesystem does not match build directory.'
+			);
+			actionExitCode = 1;
+		}
+		process.exit( actionExitCode );
+	}
+
+	var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
+		env: {
+			PATH_DIR: localRoot,
+			SSH_IGNORE_LIST: ignoreListRaw,
+			GIT_MANIFEST: manifest,
+			RSYNC_MANIFEST: bufferPath,
+			GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+		},
+		ignoreReturnCode: true,
+	} );
+
+	if ( code != 0 ) {
+		process.exit( code );
+	}
+
+	var { code, processedFiles, bufferPath } = await runCommand( rsyncCommand );
+	console.log( '::endgroup::' );
 } )();
