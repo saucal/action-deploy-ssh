@@ -167,6 +167,7 @@
 		if ( consistencyCheck ) {
 			var actionExitCode = 0
 			if( processedFiles > 0 ) {
+				core.setOutput( 'bufferPath', bufferPath );
 				core.setFailed(
 					'Pre-push consistency check failed. Target filesystem does not match build directory.'
 				);
