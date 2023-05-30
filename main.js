@@ -140,6 +140,7 @@
 					// do things like parse progress
 					processedFiles++;
 					outputBuffer += data.toString() + '\n';
+					console.log( data.toString() + '\n' );
 				},
 			},
 			outStream: fs.createWriteStream( '/dev/null' ),
