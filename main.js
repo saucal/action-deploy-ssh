@@ -122,7 +122,7 @@
 		var i = 0, bufferPath;
 		do {
 			i++;
-			bufferPath = '/tmp/rsync_output_buffer_' + i;
+			bufferPath = '/tmp/rsync_output_buffer_' + i + '.txt';
 		} while	( fs.existsSync( bufferPath ) );
 		fs.writeFileSync( bufferPath, outputBuffer );
 		return bufferPath;
