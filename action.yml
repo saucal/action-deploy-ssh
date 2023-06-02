@@ -65,7 +65,5 @@ runs:
   using: 'node16'
   main: 'main.js'
   pre: 'pre.js'
-  pre-if: ${{ inputs.run-pre != 'false' }}  
   post: 'post.js'
-  post-if: ${{ inputs.run-post != 'false' }} 
 

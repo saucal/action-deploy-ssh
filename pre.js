@@ -2,6 +2,11 @@
 	const exec = require( '@actions/exec' );
 	const core = require( '@actions/core' );
 	const fs = require( 'fs' );
+
+	if ( core.getInput( 'run-pre', { required: true } ) == 'false' ) {
+		return;
+	}
+
 	await exec.exec( 'mkdir', ['-p', '/home/runner/.ssh'] );
 	await exec.exec( 'touch', ['/home/runner/.ssh/known_hosts'] );
 
