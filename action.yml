@@ -53,9 +53,19 @@ inputs:
     description: "The path to the manifest file to use with the --files-from rsync param"
     required: false
     default: ''
+  run-pre:
+    description: "Determine if we are going to run the pre script"
+    required: false
+    default: 'true'
+  run-post:
+    description: "Determine if we are going to run the post script"
+    required: false
+    default: 'true'
 runs:
   using: 'node16'
   main: 'main.js'
   pre: 'pre.js'
+  pre-if: ${{ inputs.run-pre != 'false' }}  
   post: 'post.js'
+  post-if: ${{ inputs.run-post != 'false' }} 
 
