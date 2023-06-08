@@ -134,6 +134,7 @@
 
 		console.log( cmd );
 
+		error = '';
 		var code = await exec.exec( cmd, [], {
 			listeners: {
 				stdline: ( data ) => {
@@ -142,6 +143,9 @@
 					outputBuffer += data.toString() + '\n';
 					console.log( data.toString() );
 				},
+				errline: ( data ) => {
+					error += data.toString() + '\n';
+				}
 			},
 			outStream: fs.createWriteStream( '/dev/null' ),
 			ignoreReturnCode: true,
