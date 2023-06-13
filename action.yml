@@ -1,0 +1,69 @@
+name: "SSH Deploy"
+description: ""
+inputs:
+  env-host:
+    description: "Env Host"
+    required: true
+    default: ''
+  env-port:
+    description: "Env Port"
+    required: true
+    default: ''
+  env-user:
+    description: "Env User"
+    required: true
+    default: ''
+  env-key:
+    description: "Env SSH Key"
+    required: false
+    default: ''
+  env-pass:
+    description: "Env Password"
+    required: false
+    default: ''
+  env-remote-root:
+    description: "Env Remote Root"
+    required: true
+    default: ''
+  env-local-root:
+    description: "Env Local Root"
+    required: true
+    default: ''
+  force-ignore:
+    description: "Ignore files on deployment"
+    required: false
+    default: ''
+  ssh-flags:
+    description: "SSH Flags to pass to the RSync command"
+    required: false
+    default: ''
+  ssh-shell-params:
+    description: "Parameters to be passed to the SSH shell command"
+    required: false
+    default: ''
+  ssh-extra-options:
+    description: "Extra options for the RSync command"
+    required: false
+    default: ''
+  consistency-check:
+    description: ""
+    required: false
+    default: ''
+  manifest:
+    description: "The path to the manifest file to use with the --files-from rsync param"
+    required: false
+    default: ''
+  run-pre:
+    description: "Determine if we are going to run the pre script"
+    required: false
+    default: 'true'
+  run-post:
+    description: "Determine if we are going to run the post script"
+    required: false
+    default: 'true'
+runs:
+  using: 'node16'
+  main: 'main.js'
+  pre: 'pre.js'
+  post: 'post.js'
+
