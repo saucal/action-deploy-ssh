@@ -76,7 +76,7 @@
 	if ( ignoreList ) {
 		const formattedRules = rsyncRulesFormatter.run( ignoreList );
 
-		console.log( 'Applied Ignore rules: ' + rulesFile );
+		console.log( 'Applied Ignore rules: ' );
 		console.log( formattedRules );
 
 		// Write the rules to a file.
