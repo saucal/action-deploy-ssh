@@ -3,6 +3,7 @@
 	const exec = require( '@actions/exec' );
 	const fs = require( 'fs' );
 	const Rsync = require( 'rsync' );
+	const rsyncRulesFormatter = require('./rsyncRulesFormatter');
 
 	const remoteTarget =
 		core.getInput( 'env-user', { required: true } ) +
@@ -27,9 +28,6 @@
 	// Make sure paths end with a slash.
 	localRoot = ! localRoot.endsWith( '/' ) ? localRoot + '/' : localRoot;
 	remoteRoot = ! remoteRoot.endsWith( '/' ) ? remoteRoot + '/' : remoteRoot;
-
-	let includes = [],
-		excludes = [];
 
 	if ( '' === sshKey && '' === sshPass ) {
 		core.setFailed(
@@ -62,33 +60,6 @@
 		shellParams.push( '-p ' + remotePort );
 	}
 
-	if ( ignoreList ) {
-		// Split ignore list by newlines
-		ignoreList = ignoreList.split( '\n' );
-
-		for ( let i = 0; i < ignoreList.length; i++ ) {
-			ignoreList[ i ] = ignoreList[ i ].trim();
-
-			// Skip empty lines
-			if ( ignoreList[ i ].length === 0 ) {
-				continue;
-			}
-
-			if ( ignoreList[ i ].startsWith( '#' ) ) {
-				continue; // Its a comment.
-			}
-
-			// If starts with a !, include
-			if ( ignoreList[ i ].startsWith( '!' ) ) {
-				includes.push( ignoreList[ i ].substring( 1 ) );
-				continue;
-			}
-
-			// Otherwise, exclude
-			excludes.push( ignoreList[ i ] );
-		}
-	}
-
 	var rsync = new Rsync()
 		.flags( sshFlags )
 		.source( localRoot )
@@ -102,12 +73,17 @@
 		rsync.set( extraOptions[ i ] );
 	}
 
-	if ( includes.length > 0 ) {
-		rsync.include( includes );
-	}
+	if ( ignoreList ) {
+		const formattedRules = rsyncRulesFormatter.run( ignoreList );
 
-	if ( excludes.length > 0 ) {
-		rsync.exclude( excludes );
+		console.log( 'Applied Ignore rules: ' + rulesFile );
+		console.log( formattedRules );
+
+		// Write the rules to a file.
+		const rulesFile = '/tmp/rsync_rules_' + Date.now() + '.txt';
+		fs.writeFileSync( rulesFile, formattedRules );
+
+		rsync.set( '--filter="merge ' + rulesFile + '"' );
 	}
 
 	if ( core.isDebug() ) {
@@ -116,7 +92,6 @@
 
 	var rsyncCommand = rsync.command();
 	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
-	
 
 	function writeBufferToFile( outputBuffer ) {
 		var i = 0, bufferPath;
