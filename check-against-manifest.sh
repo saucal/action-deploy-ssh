@@ -56,7 +56,7 @@ diff_output=$(diff -u <(echo "$sorted_file1") <(echo "$sorted_file2"))
 echo "--------------------------------------------------"
 # Check if there are any differences
 if [ -n "$diff_output" ]; then
-  echo "Manifest and Rsync list DO NOT MATCH. Please check the following diff. Lines starting with + are in the rsync list but not in the manifest. Lines starting with - are in the manifest but not in the rsync list."
+  echo "::error title=Manifest and Rsync list DO NOT MATCH :: Please check the following diff. Lines starting with + are in the rsync list but not in the manifest. Lines starting with - are in the manifest but not in the rsync list."
   echo "--------------------------------------------------"
   echo "::group::DIFF OUTPUT"
   echo "$diff_output"
