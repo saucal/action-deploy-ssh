@@ -10,8 +10,8 @@ function parseRule(rule) {
 
   const specificity = getRuleSpecificity(rule);
 
-  if (isDir) {
-    rule = rule + (exclude ? '**' : '***');
+  if (isDir && ! exclude ) { 
+    rule = rule + '***';
   }
 
   rule = (exclude ? '- ' : '+ ') + rule;
