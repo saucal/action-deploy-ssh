@@ -170,6 +170,9 @@
 			} );
 		
 			if ( code != 0 ) {
+				core.setFailed(
+					'Pre-push consistency check failed. Manifest file does not match what Rsync is about to do.'
+				);
 				process.exit( code );
 			}
 		}
