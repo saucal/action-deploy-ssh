@@ -18,6 +18,7 @@
 	let ignoreListRaw = ignoreList;
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
+	let prePushRemoteCmd = core.getInput( 'pre-push-remote-command', { require: false } );
 	let extraOptions = core.getInput( 'ssh-extra-options', {
 		required: false,
 	} );
@@ -138,6 +139,8 @@
 
 		return { code, processedFiles, bufferPath };
 	}
+
+	console.log( 'prePushRemoteCmd: ' + prePushRemoteCmd );
 
 	// If we are doing just a consistency check, or we have a manifest to check against, run the dry-run command first.
 	if ( consistencyCheck || manifest != '' ) {

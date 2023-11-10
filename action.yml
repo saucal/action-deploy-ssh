@@ -61,6 +61,10 @@ inputs:
     description: "Determine if we are going to run the post script"
     required: false
     default: 'true'
+  pre-push-remote-command:
+    description: "..."
+    required: false
+    default: ''
 runs:
   using: 'node16'
   main: 'main.js'
