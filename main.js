@@ -192,6 +192,7 @@
 				GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 				SSH_COMMAND: sshCommand,
 				REMOTE_ROOT: remoteRoot,
+				SSHPASS: sshPass,
 			},
 			ignoreReturnCode: true,
 		} );
