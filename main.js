@@ -191,6 +191,7 @@
 				PATH_DIR: localRoot,
 				GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 				SSH_COMMAND: sshCommand,
+				REMOTE_ROOT: remoteRoot,
 			},
 			ignoreReturnCode: true,
 		} );
