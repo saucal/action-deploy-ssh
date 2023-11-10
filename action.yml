@@ -61,7 +61,7 @@ inputs:
     description: "Determine if we are going to run the post script"
     required: false
     default: 'true'
-  pre-push-remote-command:
+  action-pre-push:
     description: "..."
     required: false
     default: ''

@@ -18,7 +18,7 @@
 	let ignoreListRaw = ignoreList;
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
-	let prePushRemoteCmd = core.getInput( 'pre-push-remote-command', { require: false } );
+	let actionPrePush = core.getInput( 'action-pre-push', { require: false } );
 	let extraOptions = core.getInput( 'ssh-extra-options', {
 		required: false,
 	} );
@@ -140,8 +140,6 @@
 		return { code, processedFiles, bufferPath };
 	}
 
-	console.log( 'prePushRemoteCmd: ' + prePushRemoteCmd );
-
 	// If we are doing just a consistency check, or we have a manifest to check against, run the dry-run command first.
 	if ( consistencyCheck || manifest != '' ) {
 		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
@@ -182,12 +180,27 @@
 		}
 	}
 
-	if ( prePushRemoteCmd ) {
-		console.log( 'Running pre-push remote command.' );
+	if ( actionPrePush ) {
+		console.log( 'Running pre-push action/script.' );
 	
-		const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' ) +  ' "' + prePushRemoteCmd + '"';
+		const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
 		console.log( 'sshCommand: ' + sshCommand );
-		var { code, processedFiles, bufferPath } = await runCommand( sshCommand );
+
+		var code = await exec.exec( 'bash', [ actionPrePush ], {
+			env: {
+				PATH_DIR: localRoot,
+				GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+				SSH_COMMAND: sshCommand,
+			},
+			ignoreReturnCode: true,
+		} );
+	
+		if ( code != 0 ) {
+			core.setFailed(
+				'actionPrePush failed.'
+			);
+			process.exit( code );
+		}
 	}
 
 	var { code, processedFiles, bufferPath } = await runCommand( rsyncCommand );
