@@ -182,6 +182,14 @@
 		}
 	}
 
+	if ( prePushRemoteCmd ) {
+		console.log( 'Running pre-push remote command.' );
+	
+		const sshCommand = 'ssh ' + remoteTarget + ' ' + shellParams.join( ' ' ) +  ' "' + prePushRemoteCmd + '"';
+		console.log( 'sshCommand: ' + sshCommand );
+		var { code, processedFiles, bufferPath } = await runCommand( sshCommand );
+	}
+
 	var { code, processedFiles, bufferPath } = await runCommand( rsyncCommand );
 	console.log( '::endgroup::' );
 } )();
