@@ -193,6 +193,7 @@
 				SSH_COMMAND: sshCommand,
 				REMOTE_ROOT: remoteRoot,
 				SSHPASS: sshPass,
+				CONSISTENCY_CHECK: ( manifest != '' ? 'true' : 'false' ),
 			},
 			ignoreReturnCode: true,
 		} );
