@@ -200,7 +200,7 @@
 	
 		if ( code != 0 ) {
 			core.setFailed(
-				'actionPrePush failed.'
+				'actionPrePush script "' + actionPrePush + '" failed with code ' + code
 			);
 			process.exit( code );
 		}

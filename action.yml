@@ -62,7 +62,7 @@ inputs:
     required: false
     default: 'true'
   action-pre-push:
-    description: "..."
+    description: "Pass a full path to a script that will be triggered right before the actual rsync command is executed"
     required: false
     default: ''
 runs:
