@@ -146,16 +146,14 @@
 
 		// If we have the consistency check to run, check that there's no files changed.
 		if ( consistencyCheck ) {
-			var actionExitCode = 0
 			if( processedFiles > 0 ) {
 				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
 				core.setOutput( 'bufferPath', bufferPath );
 				core.setFailed(
 					'Pre-push consistency check failed. Target filesystem does not match build directory.'
 				);
-				actionExitCode = 1;
+				process.exit( 1 );
 			}
-			process.exit( actionExitCode );
 		}
 
 		// If we have a manifest file to check against, run the check-against-manifest.sh script.
@@ -204,6 +202,10 @@
 			);
 			process.exit( code );
 		}
+	}
+
+	if ( consistencyCheck ) {
+		process.exit( 0 );
 	}
 
 	var { code, processedFiles, bufferPath } = await runCommand( rsyncCommand );
