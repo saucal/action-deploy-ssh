@@ -181,7 +181,7 @@
 	if ( actionPrePush ) {
 		console.log( 'Running pre-push action/script.' );
 	
-		const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
+		const sshCommand = shell + ' ' + remoteTarget + ' -vvv ' + shellParams.join( ' ' );
 		console.log( 'sshCommand: ' + sshCommand );
 
 		var code = await exec.exec( 'bash', [ actionPrePush ], {
