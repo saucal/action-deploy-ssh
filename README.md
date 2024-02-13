@@ -66,5 +66,17 @@ You can push to SSH using rsync with the following basic example
 
     # This will make the action run rsync with --dry-run and fail if there was output (so that we can check if rsync "sees" changes)
     consistency-check: ""
+
+    # NEED some help here i though the manifest file was dynamically being produced. What's the point of accepting as a param ?
+    manifest: ''
+
+    # Whether the ssh connectivity to be prepared.
+    run-pre: true
+
+    # Whether the ssh connectivity to be forgotten post action.
+    run-post: true
+
+    # Full path to a script to be executed before rsync.
+    action-pre-push: ''
       
 ```
