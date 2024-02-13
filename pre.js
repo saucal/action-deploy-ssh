@@ -33,7 +33,6 @@
 
 		await exec.exec( 'bash', ['-c', 'echo "' + remoteKey + '" > ' + keyPath ] );
 		await exec.exec( 'chmod', ['600', keyPath] );
-		// await exec.exec( 'ssh-add', [keyPath] );
 		await exec.exec( 'bash', ['-c', 'ssh-add ' + keyPath ] );
 	}
 
