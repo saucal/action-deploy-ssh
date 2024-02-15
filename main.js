@@ -157,6 +157,8 @@
 		}
 
 		// If we have a manifest file to check against, run the check-against-manifest.sh script.
+		// When we have a manifest, we are not doing a consistency check. We are checking against the manifest, 
+		// and if the check passes, we are doing the actual sync (and core version change if needed)
 		if ( manifest != '' ) {
 			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
 				env: {
