@@ -32,7 +32,7 @@ inputs:
   force-ignore:
     description: "Ignore files on deployment"
     required: false
-    default: ''
+    default: 'false'
   ssh-flags:
     description: "SSH Flags to pass to the RSync command"
     required: false

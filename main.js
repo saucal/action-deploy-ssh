@@ -3,6 +3,7 @@
 	const exec = require( '@actions/exec' );
 	const fs = require( 'fs' );
 	const Rsync = require( 'rsync' );
+	const path = require( 'path' );
 	const rsyncRulesFormatter = require('./rsyncRulesFormatter');
 
 	const remoteTarget =
@@ -15,6 +16,9 @@
 	const consistencyCheck = core.getInput( 'consistency-check', { required: false } );
 
 	let ignoreList = core.getInput( 'force-ignore', { required: false } );
+	if ( ignoreList === 'false' ) {
+		ignoreList = fs.readFileSync( path.join( __dirname, 'default-ignore.txt' ), 'utf8' ).toString();
+	}
 	let ignoreListRaw = ignoreList;
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );

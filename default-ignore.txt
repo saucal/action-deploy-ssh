@@ -1,0 +1,10 @@
+.git
+/*.log
+/uploads/
+/upgrade/
+/vendor/**
+/auth.json
+/composer.json
+/composer.lock
+/object-cache.php
+/db.php
