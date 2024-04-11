@@ -1,4 +1,6 @@
 .git
+/.gitignore
+/README.md
 /*.log
 /uploads/
 /upgrade/
