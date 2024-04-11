@@ -7,7 +7,7 @@
 /*.log
 /uploads/
 /upgrade/
-/vendor/**
+/vendor/
 /auth.json
 /composer.json
 /composer.lock
