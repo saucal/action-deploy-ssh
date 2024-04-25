@@ -13,3 +13,4 @@
 /composer.lock
 /object-cache.php
 /db.php
+/saucal_migration_*/
