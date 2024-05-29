@@ -199,6 +199,7 @@
 				REMOTE_ROOT: remoteRoot,
 				SSHPASS: sshPass,
 				CONSISTENCY_CHECK: ( ( consistencyCheck || manifest != '' ) ? 'true' : 'false' ),
+				RUNNER_TEMP: process.env.RUNNER_TEMP,
 			},
 			ignoreReturnCode: true,
 		} );
