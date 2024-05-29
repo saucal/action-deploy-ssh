@@ -184,21 +184,16 @@
 		}
 	}
 
-	const preScriptsPath = path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', 'pre' );
-	console.log( 'Maybe Running pre-push actions in ' + preScriptsPath );
-
-	const preScripts = fs.readdirSync( preScriptsPath );
-
-	console.log( 'Found pre-push actions: ' + preScripts );
-
 	// Find pre-push actions in the temp runner and run them.
-	preScripts.forEach( async (actionPrePush) => {
+	const preScriptsPath = path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', 'pre' );
+
+	fs.readdirSync( preScriptsPath ).forEach( async (actionPrePush) => {
 		console.log( 'Running pre-push action/script: ' + actionPrePush );
 	
 		const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
 		console.log( 'sshCommand: ' + sshCommand );
 
-		var code = await exec.exec( 'bash', [ actionPrePush ], {
+		var code = await exec.exec( 'bash', [ path.join( preScriptsPath, actionPrePush ) ], {
 			env: {
 				PATH_DIR: localRoot,
 				GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
