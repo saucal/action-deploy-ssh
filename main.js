@@ -185,7 +185,7 @@
 	}
 
 	// Find pre-push actions in the temp runner and run them.
-	fs.readdirSync( path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', 'pre' ) ).forEach( actionPrePush => async () => {
+	fs.readdirSync( path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', 'pre' ) ).forEach( async (actionPrePush) => {
 		console.log( 'Running pre-push action/script: ' + actionPrePush );
 	
 		const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
