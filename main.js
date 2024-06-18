@@ -187,32 +187,43 @@
 	// Find pre-push actions in the temp runner and run them.
 	const preScriptsPath = path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', 'pre' );
 
-	fs.readdirSync( preScriptsPath ).forEach( async (actionPrePush) => {
-		console.log( 'Running pre-push action/script: ' + actionPrePush );
+	var files = fs.readdirSync( preScriptsPath );
+	var promises = [];
+	for( let actionPrePush of files ) {
+		promises.push( async () => {
+			console.log( 'Running pre-push action/script: ' + actionPrePush );
+		
+			const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
+			console.log( 'sshCommand: ' + sshCommand );
 	
-		const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
-		console.log( 'sshCommand: ' + sshCommand );
+			var code = await exec.exec( 'bash', [ path.join( preScriptsPath, actionPrePush ) ], {
+				env: {
+					PATH_DIR: localRoot,
+					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+					SSH_COMMAND: sshCommand,
+					REMOTE_ROOT: remoteRoot,
+					SSHPASS: sshPass,
+					CONSISTENCY_CHECK: ( ( consistencyCheck || manifest != '' ) ? 'true' : 'false' ),
+					RUNNER_TEMP: process.env.RUNNER_TEMP,
+				},
+				ignoreReturnCode: true,
+			} );
+		
+			if ( code != 0 ) {
+				core.setFailed(
+					'actionPrePush script "' + actionPrePush + '" failed with code ' + code + '. There is likely more information above.'
+				);
+				process.exit( code );
+			}
 
-		var code = await exec.exec( 'bash', [ path.join( preScriptsPath, actionPrePush ) ], {
-			env: {
-				PATH_DIR: localRoot,
-				GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
-				SSH_COMMAND: sshCommand,
-				REMOTE_ROOT: remoteRoot,
-				SSHPASS: sshPass,
-				CONSISTENCY_CHECK: ( ( consistencyCheck || manifest != '' ) ? 'true' : 'false' ),
-				RUNNER_TEMP: process.env.RUNNER_TEMP,
-			},
-			ignoreReturnCode: true,
+			console.log( 'Finished pre-push action/script: ' + actionPrePush );
 		} );
-	
-		if ( code != 0 ) {
-			core.setFailed(
-				'actionPrePush script "' + actionPrePush + '" failed with code ' + code + '. There is likely more information above.'
-			);
-			process.exit( code );
-		}
-	});
+	}
+
+	// Intentionally process in series, not in parallel (which could be done with soething like Promise.all).
+	for (let promise of promises) {
+		await promise();
+	}
 
 	if ( consistencyCheck ) {
 		process.exit( 0 );
