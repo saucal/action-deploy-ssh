@@ -26,6 +26,7 @@
 	let extraOptions = core.getInput( 'ssh-extra-options', {
 		required: false,
 	} );
+	let handlePerms = core.getInput( 'ssh-handle-perms', { required: false } );
 	let localRoot = core.getInput( 'env-local-root', { required: true } );
 	let remoteRoot = core.getInput( 'env-remote-root', { required: true } );
 	let manifest = core.getInput( 'manifest', { required: false } );
@@ -52,7 +53,13 @@
 	extraOptions =
 		'' !== extraOptions
 			? extraOptions
-			: 'delete no-inc-recursive size-only ignore-times omit-dir-times no-perms no-owner no-group no-dirs';
+			: 'delete no-inc-recursive size-only ignore-times omit-dir-times no-owner no-group no-dirs';
+
+	if ( handlePerms == 'true' ) {
+		extraOptions += ' perms';
+	} else {
+		extraOptions += ' no-perms';
+	}
 
 	shellParams = shellParams.split( ' ' );
 	extraOptions = extraOptions.split( ' ' );

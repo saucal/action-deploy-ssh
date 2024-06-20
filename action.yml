@@ -45,6 +45,10 @@ inputs:
     description: "Extra options for the RSync command"
     required: false
     default: ''
+  ssh-handle-perms:
+    description: "Have RSync handle permissions of files strictly"
+    required: false
+    default: 'false'
   consistency-check:
     description: ""
     required: false
