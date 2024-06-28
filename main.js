@@ -19,6 +19,10 @@
 	if ( ignoreList === 'false' ) {
 		ignoreList = fs.readFileSync( path.join( __dirname, 'default-ignore.txt' ), 'utf8' ).toString();
 	}
+	let ignoreListExtra = core.getInput( 'force-ignore-extra', { required: false } );
+	if ( ignoreListExtra !== 'false' ) {
+		ignoreList += "\n" + ignoreListExtra
+	}
 	let ignoreListRaw = ignoreList;
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );

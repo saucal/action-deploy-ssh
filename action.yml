@@ -33,6 +33,10 @@ inputs:
     description: "Ignore files on deployment"
     required: false
     default: 'false'
+  force-ignore-extra:
+    description: "Extra files to ignore on deployment. Useful to ignore files on top of the existing defaults, without fully overwriting them"
+    required: false
+    default: 'false'
   ssh-flags:
     description: "SSH Flags to pass to the RSync command"
     required: false
