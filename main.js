@@ -198,7 +198,7 @@
 	// Find pre-push actions in the temp runner and run them.
 	const preScriptsPath = path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', 'pre' );
 
-	var files = fs.readdirSync( preScriptsPath );
+	var files = fs.existsSync( preScriptsPath ) ? fs.readdirSync( preScriptsPath ) : [];
 	var promises = [];
 	for( let actionPrePush of files ) {
 		promises.push( async () => {
