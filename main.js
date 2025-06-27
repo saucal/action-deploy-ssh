@@ -107,7 +107,12 @@
 	}
 
 	var rsyncCommand = rsync.command();
-	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
+
+	rsync.flags('v', false)
+		.set( '--info=NAME' )
+		.set( '--dry-run' ); // run in dry-run mode
+
+	var dryRunCommand = rsync.command();
 
 	function writeBufferToFile( outputBuffer ) {
 		var i = 0, bufferPath;
