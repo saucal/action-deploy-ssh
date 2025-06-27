@@ -169,6 +169,25 @@
 			if( processedFiles > 0 ) {
 				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
 				core.setOutput( 'bufferPath', bufferPath );
+
+				rsync._sources = [];
+				rsync.flags('v')
+					.unset( 'info' )
+					.unset( 'dry-run' )
+					.source( remoteTarget + ':' + remoteRoot )
+					.destination( localRoot );
+
+				var rsyncDiffCommand = rsync.command();
+
+				var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand );
+
+				await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh' ], {
+					env: {
+						PATH_DIR: localRoot
+					},
+					ignoreReturnCode: true,
+				} );
+
 				core.setFailed(
 					'Pre-push consistency check failed. Target filesystem does not match build directory.'
 				);
