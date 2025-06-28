@@ -107,7 +107,6 @@
 	}
 
 	var rsyncCommand = rsync.command();
-	var dryRunCommand = rsyncCommand.replace( '-' + sshFlags, '-' + sshFlags.replace( 'v', '' ) ).replace( /^rsync/, 'rsync --dry-run --info=NAME' );
 
 	function writeBufferToFile( outputBuffer ) {
 		var i = 0, bufferPath;
@@ -157,6 +156,45 @@
 
 	// If we are doing just a consistency check, or we have a manifest to check against, run the dry-run command first.
 	if ( consistencyCheck || manifest != '' ) {
+
+		rsync.flags('v', false)
+			.set( '--info=NAME' )
+			.set( '--dry-run' ); // run in dry-run mode
+
+		var dryRunCommand = rsync.command();
+
+		rsync._sources = [];
+		rsync.flags('v')
+			.unset( 'info' )
+			.unset( 'dry-run' )
+			.source( remoteTarget + ':' + remoteRoot )
+			.destination( localRoot );
+
+		var rsyncDiffCommand = rsync.command();
+
+		async function getRsyncDiff() {
+			var outputBuffer = '';
+			var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand );
+
+			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh' ], {
+				env: {
+					PATH_DIR: localRoot
+				},
+				listeners: {
+					stdline: ( data ) => {
+						// do things like parse progress
+						outputBuffer += data.toString() + '\n';
+					},
+				},
+				outStream: fs.createWriteStream( '/dev/null' ),
+				ignoreReturnCode: true,
+			} );
+
+			var diff_path = writeBufferToFile( outputBuffer );
+
+			return diff_path;
+		}
+
 		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
 
 		// If we have the consistency check to run, check that there's no files changed.
@@ -164,6 +202,10 @@
 			if( processedFiles > 0 ) {
 				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
 				core.setOutput( 'bufferPath', bufferPath );
+
+				var diffPath = await getRsyncDiff();
+				core.setOutput( 'diffPath', diffPath );
+
 				core.setFailed(
 					'Pre-push consistency check failed. Target filesystem does not match build directory.'
 				);
@@ -187,6 +229,9 @@
 			} );
 		
 			if ( code != 0 ) {
+				var diffPath = await getRsyncDiff();
+				core.setOutput( 'diffPath', diffPath );
+
 				core.setFailed(
 					'Pre-push consistency check failed. Manifest file does not match what Rsync is about to do.'
 				);
