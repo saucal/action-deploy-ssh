@@ -118,7 +118,7 @@
 		return bufferPath;
 	}
 
-	async function runCommand( cmd ) {
+	async function runCommand( cmd, logToConsole = true ) {
 		let processedFiles = 0;
 		let outputBuffer = '';
 
@@ -131,7 +131,9 @@
 					// do things like parse progress
 					processedFiles++;
 					outputBuffer += data.toString() + '\n';
-					console.log( data.toString() );
+					if( logToConsole ) {
+						console.log( data.toString() );
+					}
 				},
 				errline: ( data ) => {
 					error += data.toString() + '\n';
@@ -178,7 +180,7 @@
 				ref = 'HEAD~1';
 			}
 			var outputBuffer = '';
-			var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand );
+			var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand, core.isDebug() );
 
 			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
 				env: {
@@ -199,7 +201,7 @@
 			return diff_path;
 		}
 
-		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
+		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand, core.isDebug() );
 		core.setOutput( 'bufferPath', bufferPath );
 
 		// If we have the consistency check to run, check that there's no files changed.
