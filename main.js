@@ -237,7 +237,7 @@
 				core.setOutput( 'diffPath', diffPath );
 
 				core.setFailed(
-					'Pre-push consistency check failed. Manifest file does not match what Rsync is about to do.'
+					'Pre-push consistency check failed. Manifest file does not match what Rsync is about to do. Check the diff between the base status and the remote environment.'
 				);
 				process.exit( code );
 			}
