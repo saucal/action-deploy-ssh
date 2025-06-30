@@ -172,11 +172,15 @@
 
 		var rsyncDiffCommand = rsync.command();
 
-		async function getRsyncDiff() {
+		async function getRsyncDiff( againstBase = false ) {
+			var ref = 'HEAD';
+			if ( againstBase ) {
+				ref = 'HEAD~1';
+			}
 			var outputBuffer = '';
 			var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand );
 
-			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh' ], {
+			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
 				env: {
 					PATH_DIR: localRoot
 				},
@@ -229,7 +233,7 @@
 			} );
 		
 			if ( code != 0 ) {
-				var diffPath = await getRsyncDiff();
+				var diffPath = await getRsyncDiff( true);
 				core.setOutput( 'diffPath', diffPath );
 
 				core.setFailed(
