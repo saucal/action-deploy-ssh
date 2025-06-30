@@ -200,12 +200,12 @@
 		}
 
 		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
+		core.setOutput( 'bufferPath', bufferPath );
 
 		// If we have the consistency check to run, check that there's no files changed.
 		if ( consistencyCheck ) {
 			if( processedFiles > 0 ) {
 				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
-				core.setOutput( 'bufferPath', bufferPath );
 
 				var diffPath = await getRsyncDiff();
 				core.setOutput( 'diffPath', diffPath );
