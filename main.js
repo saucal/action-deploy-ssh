@@ -118,7 +118,7 @@
 		return bufferPath;
 	}
 
-	async function runCommand( cmd ) {
+	async function runCommand( cmd, logToConsole = true ) {
 		let processedFiles = 0;
 		let outputBuffer = '';
 
@@ -131,7 +131,9 @@
 					// do things like parse progress
 					processedFiles++;
 					outputBuffer += data.toString() + '\n';
-					console.log( data.toString() );
+					if( logToConsole ) {
+						console.log( data.toString() );
+					}
 				},
 				errline: ( data ) => {
 					error += data.toString() + '\n';
@@ -172,11 +174,15 @@
 
 		var rsyncDiffCommand = rsync.command();
 
-		async function getRsyncDiff() {
+		async function getRsyncDiff( againstBase = false ) {
+			var ref = 'HEAD';
+			if ( againstBase ) {
+				ref = 'HEAD~1';
+			}
 			var outputBuffer = '';
-			var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand );
+			var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand, core.isDebug() );
 
-			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh' ], {
+			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
 				env: {
 					PATH_DIR: localRoot
 				},
@@ -195,13 +201,13 @@
 			return diff_path;
 		}
 
-		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand );
+		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand, core.isDebug() );
+		core.setOutput( 'bufferPath', bufferPath );
 
 		// If we have the consistency check to run, check that there's no files changed.
 		if ( consistencyCheck ) {
 			if( processedFiles > 0 ) {
 				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
-				core.setOutput( 'bufferPath', bufferPath );
 
 				var diffPath = await getRsyncDiff();
 				core.setOutput( 'diffPath', diffPath );
@@ -229,11 +235,11 @@
 			} );
 		
 			if ( code != 0 ) {
-				var diffPath = await getRsyncDiff();
+				var diffPath = await getRsyncDiff( true);
 				core.setOutput( 'diffPath', diffPath );
 
 				core.setFailed(
-					'Pre-push consistency check failed. Manifest file does not match what Rsync is about to do.'
+					'Pre-push consistency check failed. Manifest file does not match what Rsync is about to do. Check the diff between the base status and the remote environment.'
 				);
 				process.exit( code );
 			}
