@@ -26,6 +26,7 @@
 # Dropins usually managed by plugins or caching systems
 /object-cache.php
 /db.php
+/advanced-cache.php
 
 # Saucal Specific
 /saucal_migration_*/
