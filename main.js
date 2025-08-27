@@ -23,6 +23,8 @@
 	if ( ignoreListExtra !== 'false' ) {
 		ignoreList += "\n" + ignoreListExtra
 	}
+	// Remove any empty or commented lines
+	ignoreList = ignoreList.split('\n').filter(line => line.trim() !== '' && !line.trim().startsWith('#')).join('\n');
 	let ignoreListRaw = ignoreList;
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
