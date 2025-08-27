@@ -33,6 +33,9 @@
 /wp-rocket-config/
 /ai1wm-backups/
 /cache/
+/jetpack-waf/
+/aiowps_backups/
+/wflogs/
 
 # Saucal Specific
 /saucal_migration_*/
