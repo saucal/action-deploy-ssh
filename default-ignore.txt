@@ -13,6 +13,7 @@
 # WordPress core directories which are not needed
 /uploads/
 /upgrade/
+/upgrade-temp-backup/
 
 # Log Files
 /*.log
