@@ -1,6 +1,8 @@
 # Ignore all git files on deployment
 .git
 .gitignore
+.gitattributes
+.github
 /README.md
 
 # Silence is golden files
