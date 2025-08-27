@@ -28,5 +28,11 @@
 /db.php
 /advanced-cache.php
 
+# Plugin Specific directories 
+/updraft/
+/wp-rocket-config/
+/ai1wm-backups/
+/cache/
+
 # Saucal Specific
 /saucal_migration_*/
