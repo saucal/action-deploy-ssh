@@ -154,6 +154,16 @@
 
 	var rsyncCommand = rsync.command();
 
+	function getDirectoryToWrite() {
+		var i = 0, dirPath;
+		do {
+			i++;
+			dirPath = '/tmp/ssh-deploy-' + timestamp + '_' + i;
+		} while	( fs.existsSync( dirPath ) );
+		fs.mkdirSync( dirPath, { recursive: true } );
+		return dirPath;
+	}
+
 	function writeBufferToFile( outputBuffer, name = 'rsync_output_buffer' ) {
 		var i = 0, bufferPath;
 		do {
@@ -220,29 +230,37 @@
 
 		var rsyncDiffCommand = rsync.command();
 
-		async function getRsyncDiff( againstBase = false, name = 'rsync_diff' ) {
-			var ref = 'HEAD';
-			if ( againstBase ) {
-				ref = 'HEAD~1';
-			}
-			var outputBuffer = '';
-			var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand, core.isDebug() );
+		async function getRsyncDiff( basename = 'rsync_diff' ) {
+			var diffsToDo = [
+				{ ref: 'HEAD', name: basename + '_built' },
+				{ ref: 'HEAD~1', name: basename + '_base_built' },
+			];
 
-			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
-				env: {
-					PATH_DIR: localRootRepo
-				},
-				listeners: {
-					stdline: ( data ) => {
-						// do things like parse progress
-						outputBuffer += data.toString() + '\n';
+			var diff_path = getDirectoryToWrite();
+
+			for( let diffToDo of diffsToDo ) {
+				var ref = diffToDo.ref;
+				var name = diffToDo.name;
+				var outputBuffer = '';
+				var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand, core.isDebug() );
+
+				await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
+					env: {
+						PATH_DIR: localRootRepo
 					},
-				},
-				outStream: fs.createWriteStream( '/dev/null' ),
-				ignoreReturnCode: true,
-			} );
+					listeners: {
+						stdline: ( data ) => {
+							// do things like parse progress
+							outputBuffer += data.toString() + '\n';
+						},
+					},
+					outStream: fs.createWriteStream( '/dev/null' ),
+					ignoreReturnCode: true,
+				} );
 
-			var diff_path = writeBufferToFile( outputBuffer, name );
+				var this_diff_path = writeBufferToFile( outputBuffer, name );
+				fs.renameSync( this_diff_path, path.join( diff_path, path.basename( this_diff_path ) ) );
+			}
 
 			return diff_path;
 		}
@@ -281,7 +299,7 @@
 			} );
 		
 			if ( code != 0 ) {
-				var diffPath = await getRsyncDiff( true);
+				var diffPath = await getRsyncDiff();
 				core.setOutput( 'diffPath', diffPath );
 
 				core.setFailed(
