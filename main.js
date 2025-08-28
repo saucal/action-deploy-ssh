@@ -5,6 +5,14 @@
 	const Rsync = require( 'rsync' );
 	const path = require( 'path' );
 	const rsyncRulesFormatter = require('./rsyncRulesFormatter');
+	// Store now as a timestamp to use in temp files in the format of YYYYMMDDHHMMSS
+	const now = new Date();
+	const timestamp = now.getFullYear().toString() +
+		( now.getMonth() + 1 ).toString().padStart( 2, '0' ) +
+		now.getDate().toString().padStart( 2, '0' ) +
+		now.getHours().toString().padStart( 2, '0' ) +
+		now.getMinutes().toString().padStart( 2, '0' ) +
+		now.getSeconds().toString().padStart( 2, '0');
 
 	const remoteTarget =
 		core.getInput( 'env-user', { required: true } ) +
@@ -146,17 +154,17 @@
 
 	var rsyncCommand = rsync.command();
 
-	function writeBufferToFile( outputBuffer ) {
+	function writeBufferToFile( outputBuffer, name = 'rsync_output_buffer' ) {
 		var i = 0, bufferPath;
 		do {
 			i++;
-			bufferPath = '/tmp/rsync_output_buffer_' + i + '.txt';
+			bufferPath = '/tmp/' + name + '_' + timestamp + '_' + i + '.txt';
 		} while	( fs.existsSync( bufferPath ) );
 		fs.writeFileSync( bufferPath, outputBuffer );
 		return bufferPath;
 	}
 
-	async function runCommand( cmd, logToConsole = true ) {
+	async function runCommand( cmd, logToConsole = true, bufferName = 'command_output' ) {
 		let processedFiles = 0;
 		let outputBuffer = '';
 
@@ -189,7 +197,7 @@
 			process.exit( code );
 		}
 
-		let bufferPath = writeBufferToFile( outputBuffer );
+		let bufferPath = writeBufferToFile( outputBuffer, bufferName );
 
 		return { code, processedFiles, bufferPath };
 	}
@@ -212,7 +220,7 @@
 
 		var rsyncDiffCommand = rsync.command();
 
-		async function getRsyncDiff( againstBase = false ) {
+		async function getRsyncDiff( againstBase = false, name = 'rsync_diff' ) {
 			var ref = 'HEAD';
 			if ( againstBase ) {
 				ref = 'HEAD~1';
@@ -234,7 +242,7 @@
 				ignoreReturnCode: true,
 			} );
 
-			var diff_path = writeBufferToFile( outputBuffer );
+			var diff_path = writeBufferToFile( outputBuffer, name );
 
 			return diff_path;
 		}
