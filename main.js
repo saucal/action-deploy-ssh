@@ -27,7 +27,9 @@
 	ignoreList = ignoreList.split('\n').filter(line => line.trim() !== '' && !line.trim().startsWith('#')).join('\n');
 	// Remove duplicate lines
 	ignoreList = ignoreList.split('\n').filter((line, index, self) => self.indexOf(line) === index).join('\n');
-	let ignoreListRaw = ignoreList;
+
+	let ignoreListRepoRooted = ignoreList;
+
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
 	let actionPrePush = core.getInput( 'action-pre-push', { require: false } );
@@ -39,9 +41,41 @@
 	let remoteRoot = core.getInput( 'env-remote-root', { required: true } );
 	let manifest = core.getInput( 'manifest', { required: false } );
 
+
+	// Remove trailing slashes for the time being
+	localRoot = localRoot.replace( /\/+$/, '' );
+	remoteRoot = remoteRoot.replace( /\/+$/, '' );
+
+	let localRootRepo = localRoot;
+
+	while ( fs.existsSync( path.join( localRootRepo, '.git' ) ) === false ) {
+		localRootRepo = path.dirname( localRootRepo );
+		if ( localRootRepo === '/' ) {
+			core.setFailed( 'Could not find a .git directory in the local root or any parent directories.' );
+			return;
+		}
+	}
+
+	if ( localRoot != localRootRepo ) {
+		console.log( 'Local root is a subdirectory adjusting ignore lists and paths' );
+		console.log( 'Using local root: ' + localRoot );
+		console.log( 'Using local repo root: ' + localRootRepo );
+		const relativePath = path.relative( localRootRepo, localRoot );
+		ignoreListRepoRooted = ignoreListRepoRooted.split( '\n' ).map( ( line ) => {
+			if ( line.startsWith( '/' ) ) {
+				return '/' + relativePath + line;
+			} else if ( line.startsWith( '!/' ) ) {
+				return '!/' + relativePath + line.substring( 2 );
+			} else {
+				return line;
+			}
+		} ).join( '\n' );
+	}
+
 	// Make sure paths end with a slash.
-	localRoot = ! localRoot.endsWith( '/' ) ? localRoot + '/' : localRoot;
-	remoteRoot = ! remoteRoot.endsWith( '/' ) ? remoteRoot + '/' : remoteRoot;
+	localRoot = localRoot + '/';
+	localRootRepo = localRootRepo + '/';
+	remoteRoot = remoteRoot + '/';
 
 	if ( '' === sshKey && '' === sshPass ) {
 		core.setFailed(
@@ -188,7 +222,7 @@
 
 			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
 				env: {
-					PATH_DIR: localRoot
+					PATH_DIR: localRootRepo
 				},
 				listeners: {
 					stdline: ( data ) => {
@@ -229,8 +263,8 @@
 		if ( manifest != '' ) {
 			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
 				env: {
-					PATH_DIR: localRoot,
-					SSH_IGNORE_LIST: ignoreListRaw,
+					PATH_DIR: localRootRepo,
+					SSH_IGNORE_LIST: ignoreListRepoRooted,
 					GIT_MANIFEST: manifest,
 					RSYNC_MANIFEST: bufferPath,
 					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
