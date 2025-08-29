@@ -265,8 +265,26 @@
 			return diff_path;
 		}
 
-		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand, core.isDebug() );
-		core.setOutput( 'bufferPath', bufferPath );
+		var { code, processedFiles, bufferPath: rsyncManifest } = await runCommand( dryRunCommand, core.isDebug() );
+		var rsyncManifestRepoRooted = fs.readFileSync( rsyncManifest, 'utf8' ).toString();
+		
+		if ( localRoot != localRootRepo ) {
+			console.log( 'Adjusting rsync manifest to be repo-rooted' );
+			var relativeRoot = path.relative( localRootRepo, localRoot ) + '/';
+			rsyncManifestRepoRooted = rsyncManifestRepoRooted.split('\n').map( ( line ) => {
+				if ( line.startsWith( 'deleting ' ) ) {
+					line = line.replace( /^deleting /, '' );
+					return 'deleting ' + relativeRoot + line;
+				} else if ( line.length > 0 ) {
+					return relativeRoot + line;
+				} else {
+					return line;
+				}
+			}).join('\n');
+		}
+
+		rsyncManifestRepoRooted = writeBufferToFile( rsyncManifestRepoRooted, 'rsync_manifest_repo_rooted' );
+		core.setOutput( 'bufferPath', rsyncManifestRepoRooted );
 
 		// If we have the consistency check to run, check that there's no files changed.
 		if ( consistencyCheck ) {
@@ -292,7 +310,7 @@
 					PATH_DIR: localRootRepo,
 					SSH_IGNORE_LIST: ignoreListRepoRooted,
 					GIT_MANIFEST: manifest,
-					RSYNC_MANIFEST: bufferPath,
+					RSYNC_MANIFEST: rsyncManifestRepoRooted,
 					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 				},
 				ignoreReturnCode: true,
