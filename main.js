@@ -5,6 +5,14 @@
 	const Rsync = require( 'rsync' );
 	const path = require( 'path' );
 	const rsyncRulesFormatter = require('./rsyncRulesFormatter');
+	// Store now as a timestamp to use in temp files in the format of YYYYMMDDHHMMSS
+	const now = new Date();
+	const timestamp = now.getFullYear().toString() +
+		( now.getMonth() + 1 ).toString().padStart( 2, '0' ) +
+		now.getDate().toString().padStart( 2, '0' ) +
+		now.getHours().toString().padStart( 2, '0' ) +
+		now.getMinutes().toString().padStart( 2, '0' ) +
+		now.getSeconds().toString().padStart( 2, '0');
 
 	const remoteTarget =
 		core.getInput( 'env-user', { required: true } ) +
@@ -27,7 +35,9 @@
 	ignoreList = ignoreList.split('\n').filter(line => line.trim() !== '' && !line.trim().startsWith('#')).join('\n');
 	// Remove duplicate lines
 	ignoreList = ignoreList.split('\n').filter((line, index, self) => self.indexOf(line) === index).join('\n');
-	let ignoreListRaw = ignoreList;
+
+	let ignoreListRepoRooted = ignoreList;
+
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
 	let actionPrePush = core.getInput( 'action-pre-push', { require: false } );
@@ -39,9 +49,41 @@
 	let remoteRoot = core.getInput( 'env-remote-root', { required: true } );
 	let manifest = core.getInput( 'manifest', { required: false } );
 
+
+	// Remove trailing slashes for the time being
+	localRoot = localRoot.replace( /\/+$/, '' );
+	remoteRoot = remoteRoot.replace( /\/+$/, '' );
+
+	let localRootRepo = localRoot;
+
+	while ( fs.existsSync( path.join( localRootRepo, '.git' ) ) === false ) {
+		localRootRepo = path.dirname( localRootRepo );
+		if ( localRootRepo === '/' ) {
+			core.setFailed( 'Could not find a .git directory in the local root or any parent directories.' );
+			return;
+		}
+	}
+
+	if ( localRoot != localRootRepo ) {
+		console.log( 'Local root is a subdirectory adjusting ignore lists and paths' );
+		console.log( 'Using local root: ' + localRoot );
+		console.log( 'Using local repo root: ' + localRootRepo );
+		const relativePath = path.relative( localRootRepo, localRoot );
+		ignoreListRepoRooted = ignoreListRepoRooted.split( '\n' ).map( ( line ) => {
+			if ( line.startsWith( '/' ) ) {
+				return '/' + relativePath + line;
+			} else if ( line.startsWith( '!/' ) ) {
+				return '!/' + relativePath + line.substring( 2 );
+			} else {
+				return line;
+			}
+		} ).join( '\n' );
+	}
+
 	// Make sure paths end with a slash.
-	localRoot = ! localRoot.endsWith( '/' ) ? localRoot + '/' : localRoot;
-	remoteRoot = ! remoteRoot.endsWith( '/' ) ? remoteRoot + '/' : remoteRoot;
+	localRoot = localRoot + '/';
+	localRootRepo = localRootRepo + '/';
+	remoteRoot = remoteRoot + '/';
 
 	if ( '' === sshKey && '' === sshPass ) {
 		core.setFailed(
@@ -112,17 +154,27 @@
 
 	var rsyncCommand = rsync.command();
 
-	function writeBufferToFile( outputBuffer ) {
+	function getDirectoryToWrite() {
+		var i = 0, dirPath;
+		do {
+			i++;
+			dirPath = '/tmp/ssh-deploy-' + timestamp + '_' + i;
+		} while	( fs.existsSync( dirPath ) );
+		fs.mkdirSync( dirPath, { recursive: true } );
+		return dirPath;
+	}
+
+	function writeBufferToFile( outputBuffer, name = 'rsync_output_buffer' ) {
 		var i = 0, bufferPath;
 		do {
 			i++;
-			bufferPath = '/tmp/rsync_output_buffer_' + i + '.txt';
+			bufferPath = '/tmp/' + name + '_' + timestamp + '_' + i + '.txt';
 		} while	( fs.existsSync( bufferPath ) );
 		fs.writeFileSync( bufferPath, outputBuffer );
 		return bufferPath;
 	}
 
-	async function runCommand( cmd, logToConsole = true ) {
+	async function runCommand( cmd, logToConsole = true, bufferName = 'command_output' ) {
 		let processedFiles = 0;
 		let outputBuffer = '';
 
@@ -155,7 +207,7 @@
 			process.exit( code );
 		}
 
-		let bufferPath = writeBufferToFile( outputBuffer );
+		let bufferPath = writeBufferToFile( outputBuffer, bufferName );
 
 		return { code, processedFiles, bufferPath };
 	}
@@ -178,35 +230,61 @@
 
 		var rsyncDiffCommand = rsync.command();
 
-		async function getRsyncDiff( againstBase = false ) {
-			var ref = 'HEAD';
-			if ( againstBase ) {
-				ref = 'HEAD~1';
-			}
-			var outputBuffer = '';
-			var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand, core.isDebug() );
+		async function getRsyncDiff( basename = 'rsync_diff' ) {
+			var diffsToDo = [
+				{ ref: 'HEAD', name: basename + '_built' },
+				{ ref: 'HEAD~1', name: basename + '_base_built' },
+			];
 
-			await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
-				env: {
-					PATH_DIR: localRoot
-				},
-				listeners: {
-					stdline: ( data ) => {
-						// do things like parse progress
-						outputBuffer += data.toString() + '\n';
+			var diff_path = getDirectoryToWrite();
+
+			for( let diffToDo of diffsToDo ) {
+				var ref = diffToDo.ref;
+				var name = diffToDo.name;
+				var outputBuffer = '';
+				var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand, core.isDebug() );
+
+				await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
+					env: {
+						PATH_DIR: localRootRepo
 					},
-				},
-				outStream: fs.createWriteStream( '/dev/null' ),
-				ignoreReturnCode: true,
-			} );
+					listeners: {
+						stdline: ( data ) => {
+							// do things like parse progress
+							outputBuffer += data.toString() + '\n';
+						},
+					},
+					outStream: fs.createWriteStream( '/dev/null' ),
+					ignoreReturnCode: true,
+				} );
 
-			var diff_path = writeBufferToFile( outputBuffer );
+				var this_diff_path = writeBufferToFile( outputBuffer, name );
+				fs.renameSync( this_diff_path, path.join( diff_path, path.basename( this_diff_path ) ) );
+			}
 
 			return diff_path;
 		}
 
-		var { code, processedFiles, bufferPath } = await runCommand( dryRunCommand, core.isDebug() );
-		core.setOutput( 'bufferPath', bufferPath );
+		var { code, processedFiles, bufferPath: rsyncManifest } = await runCommand( dryRunCommand, core.isDebug() );
+		var rsyncManifestRepoRooted = fs.readFileSync( rsyncManifest, 'utf8' ).toString();
+		
+		if ( localRoot != localRootRepo ) {
+			console.log( 'Adjusting rsync manifest to be repo-rooted' );
+			var relativeRoot = path.relative( localRootRepo, localRoot ) + '/';
+			rsyncManifestRepoRooted = rsyncManifestRepoRooted.split('\n').map( ( line ) => {
+				if ( line.startsWith( 'deleting ' ) ) {
+					line = line.replace( /^deleting /, '' );
+					return 'deleting ' + relativeRoot + line;
+				} else if ( line.length > 0 ) {
+					return relativeRoot + line;
+				} else {
+					return line;
+				}
+			}).join('\n');
+		}
+
+		rsyncManifestRepoRooted = writeBufferToFile( rsyncManifestRepoRooted, 'rsync_manifest_repo_rooted' );
+		core.setOutput( 'bufferPath', rsyncManifestRepoRooted );
 
 		// If we have the consistency check to run, check that there's no files changed.
 		if ( consistencyCheck ) {
@@ -229,17 +307,17 @@
 		if ( manifest != '' ) {
 			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
 				env: {
-					PATH_DIR: localRoot,
-					SSH_IGNORE_LIST: ignoreListRaw,
+					PATH_DIR: localRootRepo,
+					SSH_IGNORE_LIST: ignoreListRepoRooted,
 					GIT_MANIFEST: manifest,
-					RSYNC_MANIFEST: bufferPath,
+					RSYNC_MANIFEST: rsyncManifestRepoRooted,
 					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 				},
 				ignoreReturnCode: true,
 			} );
 		
 			if ( code != 0 ) {
-				var diffPath = await getRsyncDiff( true);
+				var diffPath = await getRsyncDiff();
 				core.setOutput( 'diffPath', diffPath );
 
 				core.setFailed(
