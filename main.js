@@ -328,46 +328,51 @@
 		}
 	}
 
-	// Find pre-push actions in the temp runner and run them.
-	const preScriptsPath = path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', 'pre' );
+	async function handleHookedActions( hook ) {
 
-	var files = fs.existsSync( preScriptsPath ) ? fs.readdirSync( preScriptsPath ) : [];
-	var promises = [];
-	for( let actionPrePush of files ) {
-		promises.push( async () => {
-			console.log( 'Running pre-push action/script: ' + actionPrePush );
+		// Find post-push actions in the temp runner and run them.
+		const hookScriptsPath = path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', hook );
+
+		var files = fs.existsSync( hookScriptsPath ) ? fs.readdirSync( hookScriptsPath ) : [];
+		var promises = [];
+		for( let actionHook of files ) {
+			promises.push( async () => {
+				console.log( 'Running '+hook+'-push action/script: ' + actionHook );
+			
+				const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
+				console.log( 'sshCommand: ' + sshCommand );
 		
-			const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
-			console.log( 'sshCommand: ' + sshCommand );
-	
-			var code = await exec.exec( 'bash', [ path.join( preScriptsPath, actionPrePush ) ], {
-				env: {
-					PATH_DIR: localRoot,
-					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
-					SSH_COMMAND: sshCommand,
-					REMOTE_ROOT: remoteRoot,
-					SSHPASS: sshPass,
-					CONSISTENCY_CHECK: ( ( consistencyCheck || manifest != '' ) ? 'true' : 'false' ),
-					RUNNER_TEMP: process.env.RUNNER_TEMP,
-				},
-				ignoreReturnCode: true,
+				var code = await exec.exec( 'bash', [ path.join( hookScriptsPath, actionHook ) ], {
+					env: {
+						PATH_DIR: localRoot,
+						GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+						SSH_COMMAND: sshCommand,
+						REMOTE_ROOT: remoteRoot,
+						SSHPASS: sshPass,
+						CONSISTENCY_CHECK: ( ( consistencyCheck || manifest != '' ) ? 'true' : 'false' ),
+						RUNNER_TEMP: process.env.RUNNER_TEMP,
+					},
+					ignoreReturnCode: true,
+				} );
+			
+				if ( code != 0 ) {
+					core.setFailed(
+						'action'+hook+' script "' + actionHook + '" failed with code ' + code + '. There is likely more information above.'
+					);
+					process.exit( code );
+				}
+
+				console.log( 'Finished '+hook+' action/script: ' + actionHook );
 			} );
-		
-			if ( code != 0 ) {
-				core.setFailed(
-					'actionPrePush script "' + actionPrePush + '" failed with code ' + code + '. There is likely more information above.'
-				);
-				process.exit( code );
-			}
+		}
 
-			console.log( 'Finished pre-push action/script: ' + actionPrePush );
-		} );
+		// Intentionally process in series, not in parallel (which could be done with soething like Promise.all).
+		for (let promise of promises) {
+			await promise();
+		}
 	}
 
-	// Intentionally process in series, not in parallel (which could be done with soething like Promise.all).
-	for (let promise of promises) {
-		await promise();
-	}
+	await handleHookedActions( 'pre' );
 
 	if ( consistencyCheck ) {
 		process.exit( 0 );
@@ -375,47 +380,7 @@
 
 	var { code, processedFiles, bufferPath } = await runCommand( rsyncCommand );
 
-
-	// Find post-push actions in the temp runner and run them.
-	const postScriptsPath = path.join( process.env.RUNNER_TEMP, '.saucal', 'ssh-deploy', 'post' );
-
-	var files = fs.existsSync( postScriptsPath ) ? fs.readdirSync( postScriptsPath ) : [];
-	var promises = [];
-	for( let actionPostPush of files ) {
-		promises.push( async () => {
-			console.log( 'Running post-push action/script: ' + actionPostPush );
-		
-			const sshCommand = shell + ' ' + remoteTarget + ' ' + shellParams.join( ' ' );
-			console.log( 'sshCommand: ' + sshCommand );
-	
-			var code = await exec.exec( 'bash', [ path.join( postScriptsPath, actionPostPush ) ], {
-				env: {
-					PATH_DIR: localRoot,
-					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
-					SSH_COMMAND: sshCommand,
-					REMOTE_ROOT: remoteRoot,
-					SSHPASS: sshPass,
-					CONSISTENCY_CHECK: ( ( consistencyCheck || manifest != '' ) ? 'true' : 'false' ),
-					RUNNER_TEMP: process.env.RUNNER_TEMP,
-				},
-				ignoreReturnCode: true,
-			} );
-		
-			if ( code != 0 ) {
-				core.setFailed(
-					'actionPostPush script "' + actionPostPush + '" failed with code ' + code + '. There is likely more information above.'
-				);
-				process.exit( code );
-			}
-
-			console.log( 'Finished post-push action/script: ' + actionPostPush );
-		} );
-	}
-
-	// Intentionally process in series, not in parallel (which could be done with soething like Promise.all).
-	for (let promise of promises) {
-		await promise();
-	}
+	await handleHookedActions( 'post' );
 
 	console.log( '::endgroup::' );
 } )();
