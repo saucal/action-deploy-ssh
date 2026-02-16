@@ -18,7 +18,11 @@
 	// Remove the SSH agent socket if it exists
 	const sock = '/tmp/ssh_agent.sock';
 	if( fs.existsSync( sock ) ) {
-		await exec.exec( 'ssh-agent', ['-k'] );
+		try {
+			await exec.exec( 'ssh-agent', ['-k'] );
+		} catch (error) {
+			core.warning(error.message);
+		}
 		await exec.exec( 'rm', ['-f', sock] );
 	}
 } )();
