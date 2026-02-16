@@ -14,4 +14,11 @@
 		i++;
 		keyPath = '/home/runner/.ssh/github_actions_' + i;
 	}
+
+	// Remove the SSH agent socket if it exists
+	const sock = '/tmp/ssh_agent.sock';
+	if( fs.existsSync( sock ) ) {
+		await exec.exec( 'ssh-agent', ['-k'] );
+		await exec.exec( 'rm', ['-f', sock] );
+	}
 } )();
