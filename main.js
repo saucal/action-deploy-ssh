@@ -92,6 +92,23 @@
 		return;
 	}
 
+	// Quick SSH connectivity test before proceeding
+	console.log( '::group::SSH connectivity test' );
+	let sshTestShell = sshPass ? 'sshpass' : 'ssh';
+	let sshTestParams = shellParams.split( ' ' ).filter( p => p.length > 0 );
+	let sshTestArgs = sshPass
+		? [ '-e', 'ssh', ...sshTestParams, '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=no', remoteTarget, 'echo', 'ssh-ok' ]
+		: [ ...sshTestParams, '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=no', remoteTarget, 'echo', 'ssh-ok' ];
+	if ( remotePort ) {
+		sshTestArgs.splice( sshPass ? 2 : 0, 0, '-p', remotePort );
+	}
+	let sshTestCode = await exec.exec( sshTestShell, sshTestArgs, { ignoreReturnCode: true } );
+	console.log( '::endgroup::' );
+	if ( sshTestCode !== 0 ) {
+		core.setFailed( 'SSH connectivity test failed (exit code ' + sshTestCode + '). Check SSH credentials and host accessibility for ' + remoteTarget );
+		process.exit( 1 );
+	}
+
 	if ( consistencyCheck ) {
 		console.log( '::group::Running consistency check.' );
 	} else {
