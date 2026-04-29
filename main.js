@@ -148,6 +148,52 @@
 		rsync.set( '--filter="merge ' + rulesFile + '"' );
 	}
 
+	async function runSshPreflight() {
+		const token = 'SAUCAL_SSH_PROBE_' + Math.random().toString( 36 ).slice( 2 ) + '_' + Date.now();
+		const sshCmd = shell + ' ' + shellParams.join( ' ' ) + ' ' + remoteTarget + ' ' + JSON.stringify( 'printf %s ' + token );
+
+		console.log( '::group::SSH preflight (verify clean stdout for rsync protocol)' );
+		console.log( sshCmd );
+
+		let stdout = '';
+		let stderr = '';
+		const code = await exec.exec( 'bash', [ '-c', sshCmd ], {
+			listeners: {
+				stdout: ( data ) => { stdout += data.toString(); },
+				stderr: ( data ) => { stderr += data.toString(); },
+			},
+			outStream: fs.createWriteStream( '/dev/null' ),
+			errStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+
+		if ( code !== 0 ) {
+			console.log( '::endgroup::' );
+			console.error( 'SSH preflight failed (exit ' + code + ').' );
+			if ( stderr ) console.error( 'stderr:\n' + stderr );
+			if ( stdout ) console.error( 'stdout:\n' + stdout );
+			core.setFailed( 'SSH preflight failed. Cannot connect to remote with provided credentials.' );
+			process.exit( code );
+		}
+
+		if ( stdout !== token ) {
+			console.log( '::endgroup::' );
+			console.error( '::error title=SSH stdout pollution detected::Remote shell prints data on stdout. This corrupts the rsync protocol stream and causes "unexpected tag" errors.' );
+			console.error( 'Expected stdout: ' + JSON.stringify( token ) );
+			console.error( 'Actual stdout (' + Buffer.byteLength( stdout ) + ' bytes):' );
+			console.error( JSON.stringify( stdout ) );
+			console.error( '\nLikely sources: MOTD, login banner, ~/.bashrc / ~/.profile / ~/.bash_profile echo statements, forced-command wrappers on the remote account.' );
+			console.error( 'Fix on remote: silence shell startup output for non-interactive sessions, or remove banner.' );
+			core.setFailed( 'SSH preflight detected stdout pollution. rsync protocol cannot work until remote shell is silent.' );
+			process.exit( 1 );
+		}
+
+		console.log( 'SSH preflight OK. Remote stdout is clean.' );
+		console.log( '::endgroup::' );
+	}
+
+	await runSshPreflight();
+
 	function appendDebugFlags( cmd ) {
 		if ( ! core.isDebug() ) {
 			return cmd;
