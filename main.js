@@ -325,6 +325,7 @@
 				'find ' + remoteRoot + ' -maxdepth 1 -mindepth 1 -printf \'%y %M %u:%g %s %p -> %l\\n\' 2>&1'
 			);
 			await bisectRemoteReceiver( remoteRoot, 0 );
+			await bisectRemoteTopLevelNonDirs( remoteRoot );
 		}
 
 		if ( senderCode !== 0 || receiverCode !== 0 ) {
@@ -368,6 +369,56 @@
 			ignoreReturnCode: true,
 		} );
 		return stdout.split( '\n' ).map( ( s ) => s.trim() ).filter( Boolean );
+	}
+
+	async function listRemoteNonDirs( path ) {
+		const remoteCmd = 'find ' + path + ' -maxdepth 1 -mindepth 1 ! -type d -printf \'%f\\n\' 2>&1';
+		const cmd = shell + ' ' + shellParams.join( ' ' ) + ' ' + remoteTarget + ' ' + JSON.stringify( remoteCmd );
+		let stdout = '';
+		await exec.exec( 'bash', [ '-c', cmd ], {
+			listeners: { stdout: ( data ) => { stdout += data.toString(); } },
+			outStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+		return stdout.split( '\n' ).map( ( s ) => s.trim() ).filter( Boolean );
+	}
+
+	async function probeReceiverPathExcluding( destPath, excludeName ) {
+		const probeDir = fs.mkdtempSync( '/tmp/rsync-bisect-' );
+		const probe = new Rsync()
+			.flags( 'av' )
+			.set( 'dry-run' )
+			.set( 'list-only' )
+			.set( 'exclude', '/' + excludeName )
+			.shell( shell + ' ' + shellParams.join( ' ' ) )
+			.source( probeDir + '/' )
+			.destination( remoteTarget + ':' + destPath );
+
+		const code = await exec.exec( 'bash', [ '-c', probe.command() ], {
+			listeners: {},
+			outStream: fs.createWriteStream( '/dev/null' ),
+			errStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+		try { fs.rmSync( probeDir, { recursive: true, force: true } ); } catch ( e ) {}
+		return code;
+	}
+
+	async function bisectRemoteTopLevelNonDirs( basePath ) {
+		const entries = await listRemoteNonDirs( basePath );
+		if ( ! entries.length ) {
+			return;
+		}
+		console.log( '::group::Bisect top-level non-dir entries at ' + basePath + ' (' + entries.length + ' entries)' );
+		for ( const name of entries ) {
+			const code = await probeReceiverPathExcluding( basePath, name );
+			if ( code === 0 ) {
+				console.log( 'PASSES when excluding /' + name + '  <-- LIKELY CULPRIT' );
+			} else {
+				console.log( 'still fails excluding /' + name );
+			}
+		}
+		console.log( '::endgroup::' );
 	}
 
 	async function bisectRemoteReceiver( basePath, depth ) {
