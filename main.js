@@ -111,6 +111,9 @@
 		extraOptions += ' no-perms';
 	}
 
+	// FORCE protocol=30 for Pressable diagnosis. Probe results show legacy proto bypasses the failure.
+	extraOptions += ' protocol=30';
+
 	shellParams = shellParams.split( ' ' );
 	extraOptions = extraOptions.split( ' ' );
 	shell = sshPass ? 'sshpass -e ssh' : 'ssh';
