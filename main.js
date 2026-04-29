@@ -269,7 +269,8 @@
 	}
 
 	// If we are doing just a consistency check, or we have a manifest to check against, run the dry-run command first.
-	if ( consistencyCheck || manifest != '' ) {
+	// In debug mode also force a dry-run for diagnostics, even if neither consistency check nor manifest is requested.
+	if ( consistencyCheck || manifest != '' || core.isDebug() ) {
 
 		rsync.flags('v', false)
 			.set( '--info=NAME' )
