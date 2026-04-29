@@ -507,9 +507,7 @@
 		}
 		console.log( '::endgroup::' );
 
-		if ( passers.length === 0 ) {
-			await bisectMinimalFailingSet( basePath, entries );
-		}
+		await bisectMinimalFailingSet( basePath, entries );
 	}
 
 	async function bisectRemoteReceiver( basePath, depth ) {
