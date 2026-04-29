@@ -325,7 +325,7 @@
 				'find ' + remoteRoot + ' -maxdepth 1 -mindepth 1 -printf \'%y %M %u:%g %s %p -> %l\\n\' 2>&1'
 			);
 			await bisectRemoteReceiver( remoteRoot, 0 );
-			await bisectRemoteTopLevelNonDirs( remoteRoot );
+			await bisectRemoteTopLevelByExclusion( remoteRoot );
 		}
 
 		if ( senderCode !== 0 || receiverCode !== 0 ) {
@@ -371,8 +371,8 @@
 		return stdout.split( '\n' ).map( ( s ) => s.trim() ).filter( Boolean );
 	}
 
-	async function listRemoteNonDirs( path ) {
-		const remoteCmd = 'find ' + path + ' -maxdepth 1 -mindepth 1 ! -type d -printf \'%f\\n\' 2>&1';
+	async function listRemoteEntries( path ) {
+		const remoteCmd = 'find ' + path + ' -maxdepth 1 -mindepth 1 -printf \'%y\\t%f\\n\' 2>&1';
 		const cmd = shell + ' ' + shellParams.join( ' ' ) + ' ' + remoteTarget + ' ' + JSON.stringify( remoteCmd );
 		let stdout = '';
 		await exec.exec( 'bash', [ '-c', cmd ], {
@@ -380,7 +380,10 @@
 			outStream: fs.createWriteStream( '/dev/null' ),
 			ignoreReturnCode: true,
 		} );
-		return stdout.split( '\n' ).map( ( s ) => s.trim() ).filter( Boolean );
+		return stdout.split( '\n' ).map( ( s ) => s.trim() ).filter( Boolean ).map( ( line ) => {
+			const [ type, name ] = line.split( '\t' );
+			return { type, name };
+		} );
 	}
 
 	async function probeReceiverPathExcluding( destPath, excludeName ) {
@@ -404,21 +407,109 @@
 		return code;
 	}
 
-	async function bisectRemoteTopLevelNonDirs( basePath ) {
-		const entries = await listRemoteNonDirs( basePath );
+	async function probeReceiverPathIncluding( destPath, entries ) {
+		const probeDir = fs.mkdtempSync( '/tmp/rsync-bisect-' );
+		const patterns = [];
+		for ( const e of entries ) {
+			if ( e.type === 'd' ) {
+				patterns.push( '+/' + e.name + '/' );
+				patterns.push( '+/' + e.name + '/**' );
+			} else {
+				patterns.push( '+/' + e.name );
+			}
+		}
+		patterns.push( '-*' );
+
+		const probe = new Rsync()
+			.flags( 'av' )
+			.set( 'dry-run' )
+			.set( 'list-only' )
+			.shell( shell + ' ' + shellParams.join( ' ' ) )
+			.patterns( patterns )
+			.source( probeDir + '/' )
+			.destination( remoteTarget + ':' + destPath );
+
+		const code = await exec.exec( 'bash', [ '-c', probe.command() ], {
+			listeners: {},
+			outStream: fs.createWriteStream( '/dev/null' ),
+			errStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+		try { fs.rmSync( probeDir, { recursive: true, force: true } ); } catch ( e ) {}
+		return code;
+	}
+
+	async function bisectMinimalFailingSet( basePath, entries ) {
+		console.log( '::group::Bisect minimal failing set (progressive inclusion) at ' + basePath );
+
+		// Step 1: progressive inclusion to find the smallest prefix that fails.
+		const accumulated = [];
+		let triggerIndex = -1;
+		for ( let i = 0; i < entries.length; i++ ) {
+			accumulated.push( entries[ i ] );
+			const code = await probeReceiverPathIncluding( basePath, accumulated );
+			const label = accumulated.map( ( e ) => '/' + e.name ).join( ' ' );
+			if ( code !== 0 ) {
+				console.log( 'FAIL  including: ' + label );
+				triggerIndex = i;
+				break;
+			} else {
+				console.log( 'ok    including: ' + label );
+			}
+		}
+
+		if ( triggerIndex === -1 ) {
+			console.log( 'All entries together still pass when explicitly included. Failure may depend on default scan path, not entry contents.' );
+			console.log( '::endgroup::' );
+			return;
+		}
+
+		// Step 2: shrink. Try removing each entry from the accumulated set; if probe still fails, keep it removed.
+		let minimal = accumulated.slice();
+		for ( let i = minimal.length - 2; i >= 0; i-- ) {
+			const trial = minimal.slice( 0, i ).concat( minimal.slice( i + 1 ) );
+			const code = await probeReceiverPathIncluding( basePath, trial );
+			const removed = minimal[ i ].name;
+			if ( code !== 0 ) {
+				console.log( 'still fails without /' + removed + ' — drop' );
+				minimal = trial;
+			} else {
+				console.log( 'requires /' + removed + ' — keep' );
+			}
+		}
+
+		console.log( 'Minimal failing set (' + minimal.length + '): ' + minimal.map( ( e ) => '/' + e.name ).join( ', ' ) );
+		console.log( '::endgroup::' );
+	}
+
+	async function bisectRemoteTopLevelByExclusion( basePath ) {
+		const entries = await listRemoteEntries( basePath );
 		if ( ! entries.length ) {
 			return;
 		}
-		console.log( '::group::Bisect top-level non-dir entries at ' + basePath + ' (' + entries.length + ' entries)' );
-		for ( const name of entries ) {
+		console.log( '::group::Bisect top-level entries by exclusion at ' + basePath + ' (' + entries.length + ' entries)' );
+		const passers = [];
+		for ( const { type, name } of entries ) {
 			const code = await probeReceiverPathExcluding( basePath, name );
 			if ( code === 0 ) {
-				console.log( 'PASSES when excluding /' + name + '  <-- LIKELY CULPRIT' );
+				console.log( 'PASSES when excluding [' + type + '] /' + name + '  <-- contributes to failure' );
+				passers.push( name );
 			} else {
-				console.log( 'still fails excluding /' + name );
+				console.log( 'still fails excluding [' + type + '] /' + name );
 			}
 		}
+		if ( passers.length === 0 ) {
+			console.log( 'No single exclusion makes root probe pass. Failure requires combined scan — running progressive inclusion to find minimal failing set.' );
+		} else if ( passers.length === 1 ) {
+			console.log( 'Single offender confirmed: /' + passers[ 0 ] );
+		} else {
+			console.log( 'Multiple entries individually trigger pass when excluded. Passers: ' + passers.join( ', ' ) );
+		}
 		console.log( '::endgroup::' );
+
+		if ( passers.length === 0 ) {
+			await bisectMinimalFailingSet( basePath, entries );
+		}
 	}
 
 	async function bisectRemoteReceiver( basePath, depth ) {
