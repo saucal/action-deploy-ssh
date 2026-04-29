@@ -319,9 +319,81 @@
 			{ stdinFromDevNull: true, pipe: '| head -c 2048 | xxd' }
 		);
 
+		if ( receiverCode !== 0 ) {
+			await bisectRemoteReceiver( remoteRoot, 0 );
+		}
+
 		if ( senderCode !== 0 || receiverCode !== 0 ) {
 			core.setFailed( 'Rsync preflight probes failed. See diagnostics above.' );
 			process.exit( 1 );
+		}
+	}
+
+	async function probeReceiverPath( destPath ) {
+		const probeDir = fs.mkdtempSync( '/tmp/rsync-bisect-' );
+		const probe = new Rsync()
+			.flags( 'av' )
+			.set( 'dry-run' )
+			.set( 'list-only' )
+			.shell( shell + ' ' + shellParams.join( ' ' ) )
+			.source( probeDir + '/' )
+			.destination( remoteTarget + ':' + destPath );
+
+		let stdout = '';
+		let stderr = '';
+		const code = await exec.exec( 'bash', [ '-c', probe.command() ], {
+			listeners: {
+				stdout: ( data ) => { stdout += data.toString(); },
+				stderr: ( data ) => { stderr += data.toString(); },
+			},
+			outStream: fs.createWriteStream( '/dev/null' ),
+			errStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+		try { fs.rmSync( probeDir, { recursive: true, force: true } ); } catch ( e ) {}
+		return { code, stdout, stderr };
+	}
+
+	async function listRemoteSubdirs( path ) {
+		const remoteCmd = 'find ' + path + ' -maxdepth 1 -mindepth 1 -type d -printf \'%f\\n\' 2>&1';
+		const cmd = shell + ' ' + shellParams.join( ' ' ) + ' ' + remoteTarget + ' ' + JSON.stringify( remoteCmd );
+		let stdout = '';
+		await exec.exec( 'bash', [ '-c', cmd ], {
+			listeners: { stdout: ( data ) => { stdout += data.toString(); } },
+			outStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+		return stdout.split( '\n' ).map( ( s ) => s.trim() ).filter( Boolean );
+	}
+
+	async function bisectRemoteReceiver( basePath, depth ) {
+		const MAX_DEPTH = 3;
+		const MAX_ENTRIES_PER_LEVEL = 200;
+
+		const subdirs = await listRemoteSubdirs( basePath );
+		console.log( '::group::Bisect ' + basePath + ' (' + subdirs.length + ' subdirs, depth ' + depth + ')' );
+
+		const failed = [];
+		for ( const sub of subdirs.slice( 0, MAX_ENTRIES_PER_LEVEL ) ) {
+			const subPath = basePath.replace( /\/$/, '' ) + '/' + sub + '/';
+			const result = await probeReceiverPath( subPath );
+			if ( result.code !== 0 ) {
+				console.log( 'FAIL  ' + subPath );
+				failed.push( subPath );
+			} else {
+				console.log( 'ok    ' + subPath );
+			}
+		}
+		if ( subdirs.length > MAX_ENTRIES_PER_LEVEL ) {
+			console.log( '... +' + ( subdirs.length - MAX_ENTRIES_PER_LEVEL ) + ' more entries skipped' );
+		}
+		console.log( '::endgroup::' );
+
+		if ( depth + 1 > MAX_DEPTH ) {
+			return;
+		}
+		for ( const failedPath of failed ) {
+			await bisectRemoteReceiver( failedPath, depth + 1 );
 		}
 	}
 
