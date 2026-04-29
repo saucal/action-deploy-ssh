@@ -320,6 +320,10 @@
 		);
 
 		if ( receiverCode !== 0 ) {
+			await runRemoteSshCommand(
+				'Remote top-level entries with type/perms (find -maxdepth 1 -ls)',
+				'find ' + remoteRoot + ' -maxdepth 1 -mindepth 1 -printf \'%y %M %u:%g %s %p -> %l\\n\' 2>&1'
+			);
 			await bisectRemoteReceiver( remoteRoot, 0 );
 		}
 
