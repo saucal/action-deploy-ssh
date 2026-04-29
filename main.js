@@ -267,10 +267,53 @@
 		return 0;
 	}
 
+	async function runRemoteSshCommand( label, remoteCmd, opts = {} ) {
+		const cmd = shell + ' ' + shellParams.join( ' ' ) + ' ' + remoteTarget + ' ' + JSON.stringify( remoteCmd ) + ( opts.stdinFromDevNull ? ' < /dev/null' : '' ) + ( opts.pipe ? ' ' + opts.pipe : '' );
+
+		console.log( '::group::' + label );
+		console.log( cmd );
+
+		let stdout = '';
+		let stderr = '';
+		const code = await exec.exec( 'bash', [ '-c', cmd ], {
+			listeners: {
+				stdout: ( data ) => { stdout += data.toString(); },
+				stderr: ( data ) => { stderr += data.toString(); },
+			},
+			outStream: fs.createWriteStream( '/dev/null' ),
+			errStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+
+		console.log( 'exit: ' + code );
+		if ( stdout ) {
+			console.log( '--- stdout ---' );
+			console.log( stdout );
+		}
+		if ( stderr ) {
+			console.log( '--- stderr ---' );
+			console.log( stderr );
+		}
+		console.log( '::endgroup::' );
+		return { code, stdout, stderr };
+	}
+
 	await runSshPreflight();
 	if ( core.isDebug() ) {
 		const senderCode = await runRsyncSenderProbe();
 		const receiverCode = await runRsyncReceiverProbe();
+
+		// Inspect remote rsync binary directly via ssh (channel known clean).
+		await runRemoteSshCommand( 'Remote rsync --version', 'rsync --version' );
+
+		// Run rsync --server directly with empty stdin and hexdump first 2KB of stdout.
+		// Mirrors the exact command rsync issues during a real push, capturing the polluting bytes.
+		await runRemoteSshCommand(
+			'Remote rsync --server raw bytes (hexdump first 2KB)',
+			'rsync --server --sender -vvlogDtpre.iLsfxCIvu --list-only --msgs2stderr . ' + remoteRoot,
+			{ stdinFromDevNull: true, pipe: '| head -c 2048 | xxd' }
+		);
+
 		if ( senderCode !== 0 || receiverCode !== 0 ) {
 			core.setFailed( 'Rsync preflight probes failed. See diagnostics above.' );
 			process.exit( 1 );
