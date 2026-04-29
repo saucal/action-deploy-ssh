@@ -148,11 +148,18 @@
 		rsync.set( '--filter="merge ' + rulesFile + '"' );
 	}
 
+	function appendDebugFlags( cmd ) {
+		if ( ! core.isDebug() ) {
+			return cmd;
+		}
+		return cmd + ' -vv --debug=all --msgs2stderr';
+	}
+
 	if ( core.isDebug() ) {
 		rsync.debug( true );
 	}
 
-	var rsyncCommand = rsync.command();
+	var rsyncCommand = appendDebugFlags( rsync.command() );
 
 	function getDirectoryToWrite() {
 		var i = 0, dirPath;
@@ -193,6 +200,9 @@
 				},
 				errline: ( data ) => {
 					error += data.toString() + '\n';
+					if ( core.isDebug() ) {
+						process.stderr.write( data.toString() + '\n' );
+					}
 				}
 			},
 			outStream: fs.createWriteStream( '/dev/null' ),
@@ -219,7 +229,7 @@
 			.set( '--info=NAME' )
 			.set( '--dry-run' ); // run in dry-run mode
 
-		var dryRunCommand = rsync.command();
+		var dryRunCommand = appendDebugFlags( rsync.command() );
 
 		rsync._sources = [];
 		rsync.flags('v')
@@ -228,7 +238,7 @@
 			.source( remoteTarget + ':' + remoteRoot )
 			.destination( localRoot );
 
-		var rsyncDiffCommand = rsync.command();
+		var rsyncDiffCommand = appendDebugFlags( rsync.command() );
 
 		async function getRsyncDiff( basename = 'rsync_diff' ) {
 			var diffsToDo = [
