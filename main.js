@@ -306,11 +306,16 @@
 		// Inspect remote rsync binary directly via ssh (channel known clean).
 		await runRemoteSshCommand( 'Remote rsync --version', 'rsync --version' );
 
-		// Run rsync --server directly with empty stdin and hexdump first 2KB of stdout.
-		// Mirrors the exact command rsync issues during a real push, capturing the polluting bytes.
+		// Run rsync --server directly with empty stdin in both directions, hexdump first 2KB of stdout.
+		// Mirrors the exact commands rsync issues during sender-mode (list remote) and receiver-mode (push) sessions.
 		await runRemoteSshCommand(
-			'Remote rsync --server raw bytes (hexdump first 2KB)',
+			'Remote rsync --server --sender raw bytes (sender mode, hexdump first 2KB)',
 			'rsync --server --sender -vvlogDtpre.iLsfxCIvu --list-only --msgs2stderr . ' + remoteRoot,
+			{ stdinFromDevNull: true, pipe: '| head -c 2048 | xxd' }
+		);
+		await runRemoteSshCommand(
+			'Remote rsync --server raw bytes (receiver mode, hexdump first 2KB)',
+			'rsync --server -vvnlogDtpre.iLsfxCIvu --list-only --msgs2stderr . ' + remoteRoot,
 			{ stdinFromDevNull: true, pipe: '| head -c 2048 | xxd' }
 		);
 
