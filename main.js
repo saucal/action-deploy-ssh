@@ -192,7 +192,54 @@
 		console.log( '::endgroup::' );
 	}
 
+	async function runRsyncPreflight() {
+		const probeDir = fs.mkdtempSync( '/tmp/rsync-probe-' );
+
+		const probeRsync = new Rsync()
+			.flags( 'av' )
+			.set( 'dry-run' )
+			.set( 'list-only' )
+			.shell( shell + ' ' + shellParams.join( ' ' ) )
+			.source( probeDir + '/' )
+			.destination( remoteTarget + ':' + remoteRoot );
+
+		const probeCmd = appendDebugFlags( probeRsync.command() );
+
+		console.log( '::group::Rsync preflight (empty-source dry-run against remote)' );
+		console.log( probeCmd );
+
+		let stdout = '';
+		let stderr = '';
+		const code = await exec.exec( 'bash', [ '-c', probeCmd ], {
+			listeners: {
+				stdout: ( data ) => { stdout += data.toString(); },
+				stderr: ( data ) => { stderr += data.toString(); },
+			},
+			outStream: fs.createWriteStream( '/dev/null' ),
+			errStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+
+		try { fs.rmSync( probeDir, { recursive: true, force: true } ); } catch ( e ) {}
+
+		if ( code !== 0 ) {
+			console.log( '::endgroup::' );
+			console.error( '::error title=Rsync preflight failed::Empty-source dry-run rsync against remote failed. Server-side rsync channel is unusable regardless of changeset content.' );
+			console.error( 'Likely causes: server-side rsync wrapper printing to stdout, forced-command shim, server rsync version bug, or permission/quota issue on the remote target path.' );
+			if ( stderr ) console.error( 'stderr:\n' + stderr );
+			if ( stdout ) console.error( 'stdout:\n' + stdout );
+			core.setFailed( 'Rsync preflight failed (exit ' + code + '). Server channel unusable.' );
+			process.exit( code );
+		}
+
+		console.log( 'Rsync preflight OK. Empty-source dry-run succeeded — server channel works.' );
+		console.log( '::endgroup::' );
+	}
+
 	await runSshPreflight();
+	if ( core.isDebug() ) {
+		await runRsyncPreflight();
+	}
 
 	function appendDebugFlags( cmd ) {
 		if ( ! core.isDebug() ) {
