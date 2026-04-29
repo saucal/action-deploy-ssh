@@ -192,20 +192,10 @@
 		console.log( '::endgroup::' );
 	}
 
-	async function runRsyncPreflight() {
-		const probeDir = fs.mkdtempSync( '/tmp/rsync-probe-' );
-
-		const probeRsync = new Rsync()
-			.flags( 'av' )
-			.set( 'dry-run' )
-			.set( 'list-only' )
-			.shell( shell + ' ' + shellParams.join( ' ' ) )
-			.source( probeDir + '/' )
-			.destination( remoteTarget + ':' + remoteRoot );
-
+	async function runRsyncProbe( label, probeRsync ) {
 		const probeCmd = appendDebugFlags( probeRsync.command() );
 
-		console.log( '::group::Rsync preflight (empty-source dry-run against remote)' );
+		console.log( '::group::Rsync probe — ' + label );
 		console.log( probeCmd );
 
 		let stdout = '';
@@ -220,25 +210,71 @@
 			ignoreReturnCode: true,
 		} );
 
+		console.log( '::endgroup::' );
+		return { code, stdout, stderr };
+	}
+
+	async function runRsyncReceiverProbe() {
+		const probeDir = fs.mkdtempSync( '/tmp/rsync-probe-' );
+		const probeRsync = new Rsync()
+			.flags( 'av' )
+			.set( 'dry-run' )
+			.set( 'list-only' )
+			.shell( shell + ' ' + shellParams.join( ' ' ) )
+			.source( probeDir + '/' )
+			.destination( remoteTarget + ':' + remoteRoot );
+
+		const result = await runRsyncProbe( 'server as RECEIVER (empty-source push, dry-run)', probeRsync );
 		try { fs.rmSync( probeDir, { recursive: true, force: true } ); } catch ( e ) {}
 
-		if ( code !== 0 ) {
-			console.log( '::endgroup::' );
-			console.error( '::error title=Rsync preflight failed::Empty-source dry-run rsync against remote failed. Server-side rsync channel is unusable regardless of changeset content.' );
+		if ( result.code !== 0 ) {
+			console.error( '::error title=Rsync receiver probe failed::Server cannot accept rsync pushes. Channel unusable regardless of changeset content.' );
 			console.error( 'Likely causes: server-side rsync wrapper printing to stdout, forced-command shim, server rsync version bug, or permission/quota issue on the remote target path.' );
-			if ( stderr ) console.error( 'stderr:\n' + stderr );
-			if ( stdout ) console.error( 'stdout:\n' + stdout );
-			core.setFailed( 'Rsync preflight failed (exit ' + code + '). Server channel unusable.' );
-			process.exit( code );
+			if ( result.stderr ) console.error( 'stderr:\n' + result.stderr );
+			if ( result.stdout ) console.error( 'stdout:\n' + result.stdout );
+		} else {
+			console.log( 'Receiver probe OK. Server accepts pushes.' );
+		}
+		return result.code;
+	}
+
+	async function runRsyncSenderProbe() {
+		const probeRsync = new Rsync()
+			.flags( 'a' )
+			.set( 'list-only' )
+			.shell( shell + ' ' + shellParams.join( ' ' ) )
+			.source( remoteTarget + ':' + remoteRoot );
+
+		const result = await runRsyncProbe( 'server as SENDER (list remote dir)', probeRsync );
+
+		if ( result.code !== 0 ) {
+			console.error( '::error title=Rsync sender probe failed::Server cannot list its own remote dir. Channel/path/permissions issue on remote.' );
+			if ( result.stderr ) console.error( 'stderr:\n' + result.stderr );
+			if ( result.stdout ) console.error( 'stdout:\n' + result.stdout );
+			return result.code;
 		}
 
-		console.log( 'Rsync preflight OK. Empty-source dry-run succeeded — server channel works.' );
-		console.log( '::endgroup::' );
+		const lines = result.stdout.split( '\n' );
+		const flagged = lines.filter( ( l ) => /^[lspcbD]/.test( l ) );
+		console.log( 'Listed ' + lines.filter( ( l ) => l.length > 0 ).length + ' remote entries.' );
+		if ( flagged.length ) {
+			console.log( 'Non-regular entries on remote (symlinks/sockets/pipes/devices) — these can break rsync receiver:' );
+			flagged.slice( 0, 100 ).forEach( ( l ) => console.log( '  ' + l ) );
+			if ( flagged.length > 100 ) console.log( '  ... +' + ( flagged.length - 100 ) + ' more' );
+		} else {
+			console.log( 'No non-regular entries detected on remote.' );
+		}
+		return 0;
 	}
 
 	await runSshPreflight();
 	if ( core.isDebug() ) {
-		await runRsyncPreflight();
+		const senderCode = await runRsyncSenderProbe();
+		const receiverCode = await runRsyncReceiverProbe();
+		if ( senderCode !== 0 || receiverCode !== 0 ) {
+			core.setFailed( 'Rsync preflight probes failed. See diagnostics above.' );
+			process.exit( 1 );
+		}
 	}
 
 	function appendDebugFlags( cmd ) {
