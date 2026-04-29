@@ -326,6 +326,8 @@
 			);
 			await bisectRemoteReceiver( remoteRoot, 0 );
 			await bisectRemoteTopLevelByExclusion( remoteRoot );
+			await runFullRemoteDiagnostics();
+			await runRsyncFlagVariantProbes();
 		}
 
 		if ( senderCode !== 0 || receiverCode !== 0 ) {
@@ -508,6 +510,174 @@
 		console.log( '::endgroup::' );
 
 		await bisectMinimalFailingSet( basePath, entries );
+	}
+
+	async function runFullRemoteDiagnostics() {
+		console.log( '::group::Full remote diagnostics suite' );
+
+		await runRemoteSshCommand( 'uname -a', 'uname -a 2>&1' );
+		await runRemoteSshCommand( 'whoami / id', 'whoami; id 2>&1' );
+		await runRemoteSshCommand( 'rsync path & version', 'which rsync; rsync --version | head -3 2>&1' );
+
+		await runRemoteSshCommand(
+			'stat of remote root',
+			'stat ' + remoteRoot + ' 2>&1'
+		);
+		await runRemoteSshCommand(
+			'ls -la of remote root',
+			'ls -la ' + remoteRoot + ' 2>&1'
+		);
+		await runRemoteSshCommand(
+			'getfacl of remote root',
+			'getfacl ' + remoteRoot + ' 2>&1 || true'
+		);
+		await runRemoteSshCommand(
+			'extended attrs on remote root',
+			'getfattr -d ' + remoteRoot + ' 2>&1 || true'
+		);
+
+		await runRemoteSshCommand(
+			'disk free (df -h)',
+			'df -h ' + remoteRoot + ' 2>&1'
+		);
+		await runRemoteSshCommand(
+			'inode usage (df -i)',
+			'df -i ' + remoteRoot + ' 2>&1'
+		);
+		await runRemoteSshCommand(
+			'quota (if available)',
+			'quota -s 2>&1 || true'
+		);
+		await runRemoteSshCommand(
+			'ulimit',
+			'ulimit -a 2>&1'
+		);
+
+		await runRemoteSshCommand(
+			'file count per top-level subdir',
+			'for d in ' + remoteRoot + '*/; do printf \'%s\\t\' "$d"; find "$d" -type f 2>/dev/null | wc -l; done 2>&1'
+		);
+		await runRemoteSshCommand(
+			'disk usage per top-level subdir (du -sh)',
+			'du -sh ' + remoteRoot + '*/ 2>&1 | sort -h'
+		);
+		await runRemoteSshCommand(
+			'total file/dir/symlink/special counts under remote root',
+			'find ' + remoteRoot + ' -type f 2>/dev/null | wc -l; ' +
+				'find ' + remoteRoot + ' -type d 2>/dev/null | wc -l; ' +
+				'find ' + remoteRoot + ' -type l 2>/dev/null | wc -l; ' +
+				'find ' + remoteRoot + ' \\( -type s -o -type p -o -type b -o -type c \\) 2>/dev/null | wc -l'
+		);
+
+		await runRemoteSshCommand(
+			'all symlinks under remote root (path -> target)',
+			'find ' + remoteRoot + ' -type l -printf \'%p -> %l\\n\' 2>&1 | head -200'
+		);
+		await runRemoteSshCommand(
+			'broken symlinks under remote root',
+			'find ' + remoteRoot + ' -xtype l -printf \'%p -> %l\\n\' 2>&1 | head -200'
+		);
+		await runRemoteSshCommand(
+			'non-regular files (sockets, pipes, devices)',
+			'find ' + remoteRoot + ' \\( -type s -o -type p -o -type b -o -type c \\) -ls 2>&1 | head -200'
+		);
+
+		await runRemoteSshCommand(
+			'foreign-owned entries (not owned by current user)',
+			'find ' + remoteRoot + ' ! -user "$(whoami)" -printf \'%y %M %u:%g %p\\n\' 2>&1 | head -100'
+		);
+		await runRemoteSshCommand(
+			'world-writable files',
+			'find ' + remoteRoot + ' -type f -perm -o+w -printf \'%M %u:%g %p\\n\' 2>&1 | head -100'
+		);
+		await runRemoteSshCommand(
+			'unreadable files (permission denied)',
+			'find ' + remoteRoot + ' -type f ! -readable -printf \'%M %u:%g %p\\n\' 2>&1 | head -100'
+		);
+		await runRemoteSshCommand(
+			'files with setuid/setgid/sticky bits',
+			'find ' + remoteRoot + ' -type f \\( -perm -4000 -o -perm -2000 -o -perm -1000 \\) -printf \'%M %u:%g %p\\n\' 2>&1 | head -100'
+		);
+
+		await runRemoteSshCommand(
+			'paths longer than 200 chars',
+			'find ' + remoteRoot + ' -printf \'%p\\n\' 2>&1 | awk \'length > 200\' | head -50'
+		);
+		await runRemoteSshCommand(
+			'files with non-ASCII names',
+			'find ' + remoteRoot + ' -name \'*\' -printf \'%p\\n\' 2>&1 | LC_ALL=C grep -P \'[^\\x00-\\x7F]\' | head -50'
+		);
+		await runRemoteSshCommand(
+			'files with backslash, newline, or tab in name',
+			'find ' + remoteRoot + ' -name \'*\' -printf \'%p\\n\' 2>&1 | grep -E "[\\\\\\\\]" | head -50'
+		);
+		await runRemoteSshCommand(
+			'empty directories under remote root (count)',
+			'find ' + remoteRoot + ' -type d -empty 2>/dev/null | wc -l'
+		);
+		await runRemoteSshCommand(
+			'largest 20 files',
+			'find ' + remoteRoot + ' -type f -printf \'%s\\t%p\\n\' 2>&1 | sort -rn | head -20'
+		);
+		await runRemoteSshCommand(
+			'sample of files with extended attrs',
+			'find ' + remoteRoot + ' -type f 2>/dev/null | head -2000 | xargs -I {} getfattr --absolute-names -d "{}" 2>/dev/null | grep -v \'^$\' | head -50 || true'
+		);
+
+		console.log( '::endgroup::' );
+	}
+
+	async function runReceiverProbeWithExtraFlags( label, extraArgs ) {
+		const probeDir = fs.mkdtempSync( '/tmp/rsync-variant-' );
+		const probe = new Rsync()
+			.flags( 'av' )
+			.set( 'dry-run' )
+			.set( 'list-only' )
+			.shell( shell + ' ' + shellParams.join( ' ' ) )
+			.source( probeDir + '/' )
+			.destination( remoteTarget + ':' + remoteRoot );
+
+		const cmd = probe.command() + ' ' + extraArgs;
+		console.log( '::group::Variant probe — ' + label );
+		console.log( cmd );
+
+		let stdout = '';
+		let stderr = '';
+		const code = await exec.exec( 'bash', [ '-c', cmd ], {
+			listeners: {
+				stdout: ( data ) => { stdout += data.toString(); },
+				stderr: ( data ) => { stderr += data.toString(); },
+			},
+			outStream: fs.createWriteStream( '/dev/null' ),
+			errStream: fs.createWriteStream( '/dev/null' ),
+			ignoreReturnCode: true,
+		} );
+		try { fs.rmSync( probeDir, { recursive: true, force: true } ); } catch ( e ) {}
+
+		console.log( ( code === 0 ? 'PASS' : 'FAIL' ) + ' (exit ' + code + ')' );
+		if ( stderr ) console.log( '--- stderr (head) ---\n' + stderr.split( '\n' ).slice( 0, 30 ).join( '\n' ) );
+		console.log( '::endgroup::' );
+		return code;
+	}
+
+	async function runRsyncFlagVariantProbes() {
+		console.log( '::group::Rsync flag variant probes (find a working flag set)' );
+
+		await runReceiverProbeWithExtraFlags( "include '*' (no-op filter)", "--include='*'" );
+		await runReceiverProbeWithExtraFlags( "exclude only ('-*' catch-all)", "--exclude='*'" );
+		await runReceiverProbeWithExtraFlags( "--protocol=30 (legacy)", "--protocol=30" );
+		await runReceiverProbeWithExtraFlags( "--protocol=29", "--protocol=29" );
+		await runReceiverProbeWithExtraFlags( "--no-inc-recursive", "--no-inc-recursive" );
+		await runReceiverProbeWithExtraFlags( "--no-perms --no-owner --no-group", "--no-perms --no-owner --no-group" );
+		await runReceiverProbeWithExtraFlags( "no -l (skip symlinks)", "--no-l" );
+		await runReceiverProbeWithExtraFlags( "skip-msgs2stderr (default mux)", "" );
+		await runReceiverProbeWithExtraFlags( "--block-size=4096", "--block-size=4096" );
+		await runReceiverProbeWithExtraFlags( "no-D (no devices/specials)", "--no-D" );
+		await runReceiverProbeWithExtraFlags( "follow symlinks (-L)", "-L" );
+		await runReceiverProbeWithExtraFlags( "--safe-links", "--safe-links" );
+		await runReceiverProbeWithExtraFlags( "--copy-unsafe-links", "--copy-unsafe-links" );
+
+		console.log( '::endgroup::' );
 	}
 
 	async function bisectRemoteReceiver( basePath, depth ) {
