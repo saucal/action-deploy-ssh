@@ -230,10 +230,41 @@
 
 		var rsyncDiffCommand = rsync.command();
 
-		async function getRsyncDiff( basename = 'rsync_diff' ) {
+		async function getRsyncDiff() {
+			var headerCurrent =
+				'##################################################################\n' +
+				'# CONSISTENCY DIFF — current build vs deploy target\n' +
+				'#\n' +
+				'# Compares : files on the TARGET server  <->  this build (git HEAD)\n' +
+				"# Reading  : '+' = in the BUILD  (would be sent on deploy)\n" +
+				"#            '-' = on the TARGET now (differs from build)\n" +
+				'# Meaning  : everything below is what deploying THIS build would\n' +
+				'#            change on the target. Empty = target already matches.\n' +
+				'# NOTE     : git CONTENT diff vs the build commit — NOT rsync\'s\n' +
+				'#            transfer decision. rsync uses size-only/ignore-times, so\n' +
+				'#            the files it actually sends can differ. For rsync\'s real\n' +
+				"#            file list see the 'deploy-rsync-plan' artifact.\n" +
+				'##################################################################\n\n';
+
+			var headerDeployed =
+				'##################################################################\n' +
+				'# CONSISTENCY DIFF — previously deployed build vs deploy target\n' +
+				'#\n' +
+				'# Compares : files on the TARGET server  <->  previous build (git HEAD~1)\n' +
+				"# Reading  : '+' = in the PREVIOUS build\n" +
+				"#            '-' = on the TARGET now (differs from previous build)\n" +
+				'# Meaning  : how the target has drifted from the last deployed build.\n' +
+				'#            Empty  = target is exactly one deploy behind (clean).\n' +
+				'#            Output = unexpected manual drift on the server.\n' +
+				'# NOTE     : git CONTENT diff vs the build commit — NOT rsync\'s\n' +
+				'#            transfer decision. rsync uses size-only/ignore-times, so\n' +
+				'#            the files it actually sends can differ. For rsync\'s real\n' +
+				"#            file list see the 'deploy-rsync-plan' artifact.\n" +
+				'##################################################################\n\n';
+
 			var diffsToDo = [
-				{ ref: 'HEAD', name: basename + '_built' },
-				{ ref: 'HEAD~1', name: basename + '_base_built' },
+				{ ref: 'HEAD', name: 'diff_current-build-vs-target', header: headerCurrent },
+				{ ref: 'HEAD~1', name: 'diff_deployed-build-vs-target', header: headerDeployed },
 			];
 
 			var diff_path = getDirectoryToWrite();
@@ -258,9 +289,35 @@
 					ignoreReturnCode: true,
 				} );
 
-				var this_diff_path = writeBufferToFile( outputBuffer, name );
+				var this_diff_path = writeBufferToFile( diffToDo.header + outputBuffer, name );
 				fs.renameSync( this_diff_path, path.join( diff_path, path.basename( this_diff_path ) ) );
 			}
+
+			var readme =
+				'Consistency diffs\n' +
+				'\n' +
+				'This bundle is produced when a pre-push consistency check finds the deploy\n' +
+				'target does not match the build. It contains two diffs, both framed in deploy\n' +
+				"direction ('+' = build side, '-' = target side):\n" +
+				'\n' +
+				'  diff_current-build-vs-target\n' +
+				'      What deploying the CURRENT build (git HEAD) would change on the target.\n' +
+				'      This is the full set of differences blocking a clean deploy.\n' +
+				'\n' +
+				'  diff_deployed-build-vs-target\n' +
+				'      How the target differs from the PREVIOUSLY deployed build (git HEAD~1).\n' +
+				'        - Empty  -> target is exactly one deploy behind. Expected/clean.\n' +
+				'        - Output -> unexpected manual drift on the server. Investigate:\n' +
+				'                    someone changed files on the target outside the pipeline.\n' +
+				'\n' +
+				'These diffs are git CONTENT diffs computed against the build commit.\n' +
+				'The mismatch itself was first detected by an rsync dry-run, whose file\n' +
+				"list lives in the separate 'deploy-rsync-plan' artifact (rsync-sync-plan).\n" +
+				'That plan is rsync\'s ACTUAL transfer decision (size-only/ignore-times);\n' +
+				'these .diff files may not match it exactly.\n' +
+				'\n' +
+				'Each diff file has a header explaining exactly what it compares.\n';
+			fs.writeFileSync( path.join( diff_path, 'README.txt' ), readme );
 
 			return diff_path;
 		}
@@ -283,17 +340,65 @@
 			}).join('\n');
 		}
 
-		rsyncManifestRepoRooted = writeBufferToFile( rsyncManifestRepoRooted, 'rsync_manifest_repo_rooted' );
-		core.setOutput( 'bufferPath', rsyncManifestRepoRooted );
+		// Functional rsync plan: written raw and header-free. check-against-manifest.sh
+		// sed-mutates this file in place, so it must not carry our presentation headers.
+		var rsyncPlanFunctionalPath = writeBufferToFile( rsyncManifestRepoRooted, 'rsync-sync-plan-check' );
+
+		// All artifact files (headers + friendly names) are prepared here, at archive
+		// time, from the raw data above. The functional files above stay untouched.
+		async function prepareArtifacts( opts ) {
+			opts = opts || {};
+
+			var rsyncPlanHeader =
+				'##################################################################\n' +
+				'# RSYNC SYNC PLAN — rsync\'s ACTUAL transfer decision (build -> target)\n' +
+				'#\n' +
+				'# Produced by an rsync dry-run (local build, git HEAD -> target).\n' +
+				'# Each line is a path rsync would upload to the target server.\n' +
+				"# A 'deleting ' prefix means rsync would remove that path.\n" +
+				'# Decision uses size-only/ignore-times, NOT file content — so this can\n' +
+				"# differ from the git content diffs in the 'consistency-diffs' artifact.\n" +
+				'# This is a dry-run; nothing has been written to the target.\n' +
+				'##################################################################\n\n';
+			core.setOutput( 'bufferPath', writeBufferToFile( rsyncPlanHeader + rsyncManifestRepoRooted, 'rsync-sync-plan' ) );
+
+			if ( opts.needDiff ) {
+				core.setOutput( 'diffPath', await getRsyncDiff() );
+			}
+
+			var manifestDiffOut = opts.manifestDiffOut;
+			if ( manifestDiffOut && fs.existsSync( manifestDiffOut ) && fs.statSync( manifestDiffOut ).size > 0 ) {
+				var manifestDiffHeader =
+					'##################################################################\n' +
+					'# MANIFEST MISMATCH — git manifest vs rsync sync list\n' +
+					'#\n' +
+					"# Reading : '+' = in the RSYNC list but NOT the git manifest\n" +
+					"#           '-' = in the git MANIFEST but NOT the rsync list\n" +
+					'# Meaning : the files rsync is about to touch do not match what\n' +
+					'#           the build manifest expects. Investigate before deploy.\n' +
+					'##################################################################\n\n';
+				var manifestDiffRaw = fs.readFileSync( manifestDiffOut, 'utf8' ).toString();
+				core.setOutput( 'manifestDiffPath', writeBufferToFile( manifestDiffHeader + manifestDiffRaw, 'manifest-mismatch' ) );
+
+				var gitManifestHeader =
+					'##################################################################\n' +
+					'# GIT MANIFEST — files the BUILD declared changed (expected deploy set)\n' +
+					'#\n' +
+					'# Produced by build-to-git: git diff-tree of the build commit vs the\n' +
+					"# previous build. Here '+ ' = added/modified, '- ' = deleted\n" +
+					'# (change TYPE, not diff direction).\n' +
+					'# This is the LEFT side of the manifest-mismatch comparison; the\n' +
+					"# rsync dry-run plan ('rsync-sync-plan') is the RIGHT side.\n" +
+					'##################################################################\n\n';
+				core.setOutput( 'gitManifestPath', writeBufferToFile( gitManifestHeader + ( opts.gitManifestRaw || '' ), 'git-manifest' ) );
+			}
+		}
 
 		// If we have the consistency check to run, check that there's no files changed.
 		if ( consistencyCheck ) {
 			if( processedFiles > 0 ) {
 				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
-
-				var diffPath = await getRsyncDiff();
-				core.setOutput( 'diffPath', diffPath );
-
+				await prepareArtifacts( { needDiff: true } );
 				core.setFailed(
 					'Pre-push consistency check failed. Target filesystem does not match build directory.'
 				);
@@ -302,30 +407,36 @@
 		}
 
 		// If we have a manifest file to check against, run the check-against-manifest.sh script.
-		// When we have a manifest, we are not doing a consistency check. We are checking against the manifest, 
+		// When we have a manifest, we are not doing a consistency check. We are checking against the manifest,
 		// and if the check passes, we are doing the actual sync (and core version change if needed)
 		if ( manifest != '' ) {
+			// Capture the git manifest BEFORE check-against-manifest.sh mutates it in place.
+			// Guarded: the script tolerates a missing manifest, so we must not throw here either.
+			var gitManifestRaw = fs.existsSync( manifest ) ? fs.readFileSync( manifest, 'utf8' ).toString() : '';
+			var manifestDiffOut = path.join( process.env.RUNNER_TEMP || '/tmp', 'manifest-mismatch_' + timestamp + '.diff' );
 			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
 				env: {
 					PATH_DIR: localRootRepo,
 					SSH_IGNORE_LIST: ignoreListRepoRooted,
 					GIT_MANIFEST: manifest,
-					RSYNC_MANIFEST: rsyncManifestRepoRooted,
+					RSYNC_MANIFEST: rsyncPlanFunctionalPath,
 					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+					MANIFEST_DIFF_OUT: manifestDiffOut,
 				},
 				ignoreReturnCode: true,
 			} );
-		
-			if ( code != 0 ) {
-				var diffPath = await getRsyncDiff();
-				core.setOutput( 'diffPath', diffPath );
 
+			if ( code != 0 ) {
+				await prepareArtifacts( { needDiff: true, gitManifestRaw: gitManifestRaw, manifestDiffOut: manifestDiffOut } );
 				core.setFailed(
 					'Pre-push consistency check failed. Manifest file does not match what Rsync is about to do. Check the diff between the base status and the remote environment.'
 				);
 				process.exit( code );
 			}
 		}
+
+		// Consistency passed and/or manifest matched: still publish the rsync plan artifact.
+		await prepareArtifacts();
 	}
 
 	async function handleHookedActions( hook ) {

@@ -61,6 +61,10 @@ if [ -n "$diff_output" ]; then
   echo "::group::DIFF OUTPUT"
   echo "$diff_output"
   echo "::endgroup::"
+  if [ -n "$MANIFEST_DIFF_OUT" ]; then
+    # Raw diff only; the explanatory header is added at archive time in main.js.
+    echo "$diff_output" > "$MANIFEST_DIFF_OUT"
+  fi
   exit 1
 else
   echo "Manifest and Rsync list match."
