@@ -62,18 +62,8 @@ if [ -n "$diff_output" ]; then
   echo "$diff_output"
   echo "::endgroup::"
   if [ -n "$MANIFEST_DIFF_OUT" ]; then
-    {
-      echo "##################################################################"
-      echo "# MANIFEST MISMATCH — git manifest vs rsync sync list"
-      echo "#"
-      echo "# Reading : '+' = in the RSYNC list but NOT the git manifest"
-      echo "#           '-' = in the git MANIFEST but NOT the rsync list"
-      echo "# Meaning : the files rsync is about to touch do not match what"
-      echo "#           the build manifest expects. Investigate before deploy."
-      echo "##################################################################"
-      echo ""
-      echo "$diff_output"
-    } > "$MANIFEST_DIFF_OUT"
+    # Raw diff only; the explanatory header is added at archive time in main.js.
+    echo "$diff_output" > "$MANIFEST_DIFF_OUT"
   fi
   exit 1
 else

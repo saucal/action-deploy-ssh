@@ -340,62 +340,46 @@
 			}).join('\n');
 		}
 
-		var rsyncPlanHeader =
-			'##################################################################\n' +
-			'# RSYNC SYNC PLAN — rsync\'s ACTUAL transfer decision (build -> target)\n' +
-			'#\n' +
-			'# Produced by an rsync dry-run (local build, git HEAD  ->  target).\n' +
+		// Functional rsync plan: written raw and header-free. check-against-manifest.sh
+		// sed-mutates this file in place, so it must not carry our presentation headers.
+		var rsyncPlanFunctionalPath = writeBufferToFile( rsyncManifestRepoRooted, 'rsync-sync-plan-check' );
+
+		// All artifact files (headers + friendly names) are prepared here, at archive
+		// time, from the raw data above. The functional files above stay untouched.
+		async function prepareArtifacts( opts ) {
+			opts = opts || {};
+
+			var rsyncPlanHeader =
+				'##################################################################\n' +
+				'# RSYNC SYNC PLAN — rsync\'s ACTUAL transfer decision (build -> target)\n' +
+				'#\n' +
+				'# Produced by an rsync dry-run (local build, git HEAD -> target).\n' +
 				'# Each line is a path rsync would upload to the target server.\n' +
-			"# A 'deleting ' prefix means rsync would remove that path.\n" +
-			'# Decision uses size-only/ignore-times, NOT file content — so this\n' +
-				"# can differ from the git content diffs in the 'consistency-diffs'\n" +
-				'# artifact. This is a dry-run; nothing has been written to the target.\n' +
-			'##################################################################\n\n';
+				"# A 'deleting ' prefix means rsync would remove that path.\n" +
+				'# Decision uses size-only/ignore-times, NOT file content — so this can\n' +
+				"# differ from the git content diffs in the 'consistency-diffs' artifact.\n" +
+				'# This is a dry-run; nothing has been written to the target.\n' +
+				'##################################################################\n\n';
+			core.setOutput( 'bufferPath', writeBufferToFile( rsyncPlanHeader + rsyncManifestRepoRooted, 'rsync-sync-plan' ) );
 
-		// Clean copy consumed (and mutated in place) by check-against-manifest.sh.
-		var rsyncManifestCheckPath = writeBufferToFile( rsyncManifestRepoRooted, 'rsync-sync-plan-check' );
-		// Header copy uploaded as the artifact and used as the Slack data-file.
-		var rsyncManifestArtifactPath = writeBufferToFile( rsyncPlanHeader + rsyncManifestRepoRooted, 'rsync-sync-plan' );
-		core.setOutput( 'bufferPath', rsyncManifestArtifactPath );
-
-		// If we have the consistency check to run, check that there's no files changed.
-		if ( consistencyCheck ) {
-			if( processedFiles > 0 ) {
-				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
-
-				var diffPath = await getRsyncDiff();
-				core.setOutput( 'diffPath', diffPath );
-
-				core.setFailed(
-					'Pre-push consistency check failed. Target filesystem does not match build directory.'
-				);
-				process.exit( 1 );
+			if ( opts.needDiff ) {
+				core.setOutput( 'diffPath', await getRsyncDiff() );
 			}
-		}
 
-		// If we have a manifest file to check against, run the check-against-manifest.sh script.
-		// When we have a manifest, we are not doing a consistency check. We are checking against the manifest, 
-		// and if the check passes, we are doing the actual sync (and core version change if needed)
-		if ( manifest != '' ) {
-			// Capture the git manifest BEFORE check-against-manifest.sh mutates it in place.
-			var gitManifestRaw = fs.readFileSync( manifest, 'utf8' ).toString();
-			var manifestDiffOut = path.join( process.env.RUNNER_TEMP || '/tmp', 'manifest-mismatch_' + timestamp + '.diff' );
-			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
-				env: {
-					PATH_DIR: localRootRepo,
-					SSH_IGNORE_LIST: ignoreListRepoRooted,
-					GIT_MANIFEST: manifest,
-					RSYNC_MANIFEST: rsyncManifestCheckPath,
-					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
-					MANIFEST_DIFF_OUT: manifestDiffOut,
-				},
-				ignoreReturnCode: true,
-			} );
+			var manifestDiffOut = opts.manifestDiffOut;
+			if ( manifestDiffOut && fs.existsSync( manifestDiffOut ) && fs.statSync( manifestDiffOut ).size > 0 ) {
+				var manifestDiffHeader =
+					'##################################################################\n' +
+					'# MANIFEST MISMATCH — git manifest vs rsync sync list\n' +
+					'#\n' +
+					"# Reading : '+' = in the RSYNC list but NOT the git manifest\n" +
+					"#           '-' = in the git MANIFEST but NOT the rsync list\n" +
+					'# Meaning : the files rsync is about to touch do not match what\n' +
+					'#           the build manifest expects. Investigate before deploy.\n' +
+					'##################################################################\n\n';
+				var manifestDiffRaw = fs.readFileSync( manifestDiffOut, 'utf8' ).toString();
+				core.setOutput( 'manifestDiffPath', writeBufferToFile( manifestDiffHeader + manifestDiffRaw, 'manifest-mismatch' ) );
 
-			if ( fs.existsSync( manifestDiffOut ) && fs.statSync( manifestDiffOut ).size > 0 ) {
-				core.setOutput( 'manifestDiffPath', manifestDiffOut );
-
-				// On mismatch, also surface the git manifest (the LEFT side of the diff).
 				var gitManifestHeader =
 					'##################################################################\n' +
 					'# GIT MANIFEST — files the BUILD declared changed (expected deploy set)\n' +
@@ -406,20 +390,53 @@
 					'# This is the LEFT side of the manifest-mismatch comparison; the\n' +
 					"# rsync dry-run plan ('rsync-sync-plan') is the RIGHT side.\n" +
 					'##################################################################\n\n';
-				var gitManifestPath = writeBufferToFile( gitManifestHeader + gitManifestRaw, 'git-manifest' );
-				core.setOutput( 'gitManifestPath', gitManifestPath );
+				core.setOutput( 'gitManifestPath', writeBufferToFile( gitManifestHeader + ( opts.gitManifestRaw || '' ), 'git-manifest' ) );
 			}
+		}
+
+		// If we have the consistency check to run, check that there's no files changed.
+		if ( consistencyCheck ) {
+			if( processedFiles > 0 ) {
+				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
+				await prepareArtifacts( { needDiff: true } );
+				core.setFailed(
+					'Pre-push consistency check failed. Target filesystem does not match build directory.'
+				);
+				process.exit( 1 );
+			}
+		}
+
+		// If we have a manifest file to check against, run the check-against-manifest.sh script.
+		// When we have a manifest, we are not doing a consistency check. We are checking against the manifest,
+		// and if the check passes, we are doing the actual sync (and core version change if needed)
+		if ( manifest != '' ) {
+			// Capture the git manifest BEFORE check-against-manifest.sh mutates it in place.
+			// Guarded: the script tolerates a missing manifest, so we must not throw here either.
+			var gitManifestRaw = fs.existsSync( manifest ) ? fs.readFileSync( manifest, 'utf8' ).toString() : '';
+			var manifestDiffOut = path.join( process.env.RUNNER_TEMP || '/tmp', 'manifest-mismatch_' + timestamp + '.diff' );
+			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
+				env: {
+					PATH_DIR: localRootRepo,
+					SSH_IGNORE_LIST: ignoreListRepoRooted,
+					GIT_MANIFEST: manifest,
+					RSYNC_MANIFEST: rsyncPlanFunctionalPath,
+					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
+					MANIFEST_DIFF_OUT: manifestDiffOut,
+				},
+				ignoreReturnCode: true,
+			} );
 
 			if ( code != 0 ) {
-				var diffPath = await getRsyncDiff();
-				core.setOutput( 'diffPath', diffPath );
-
+				await prepareArtifacts( { needDiff: true, gitManifestRaw: gitManifestRaw, manifestDiffOut: manifestDiffOut } );
 				core.setFailed(
 					'Pre-push consistency check failed. Manifest file does not match what Rsync is about to do. Check the diff between the base status and the remote environment.'
 				);
 				process.exit( code );
 			}
 		}
+
+		// Consistency passed and/or manifest matched: still publish the rsync plan artifact.
+		await prepareArtifacts();
 	}
 
 	async function handleHookedActions( hook ) {
