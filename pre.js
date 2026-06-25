@@ -9,6 +9,8 @@
 	const remoteKey = core.getInput( 'env-key', { required: false } );
 	const remotePass = core.getInput( 'env-pass', { required: false } );
 	const shellParams = core.getInput( 'ssh-shell-params', { required: false } );
+	// Strip trailing slashes to match how main.js normalises the remote root.
+	const remoteRoot = core.getInput( 'env-remote-root', { required: false } ).replace( /\/+$/, '' );
 	const sock = '/tmp/ssh_agent.sock';
 
 	// Credential setup is gated by run-pre: when deploy-ssh is invoked multiple
@@ -103,6 +105,42 @@
 		}
 
 		console.log( 'SSH credentials validated.' );
+
+		// Validate that the remote root is deployable: either an existing writable
+		// directory, or (for a first deploy) a path whose parent exists and is
+		// writable so rsync can create the final directory. Catches missing-path /
+		// wrong-permission misconfig here instead of as a confusing rsync error.
+		if ( remoteRoot != '' ) {
+			// Outer single quotes keep this as a single argument to ssh; inner double
+			// quotes handle the remote-side evaluation. dirname runs on the target.
+			const remoteTest =
+				'test -d "' + remoteRoot + '" && test -w "' + remoteRoot + '" || ' +
+				'{ test ! -e "' + remoteRoot + '" && ' +
+				'test -d "$(dirname "' + remoteRoot + '")" && ' +
+				'test -w "$(dirname "' + remoteRoot + '")"; }';
+
+			const pathCommand =
+				shell + ' ' + params.join( ' ' ) + ' ' + target + " '" + remoteTest + "'";
+
+			console.log( pathCommand );
+
+			const pathCode = await exec.exec( pathCommand, [], { ignoreReturnCode: true } );
+
+			if ( pathCode != 0 ) {
+				core.endGroup();
+				core.setFailed(
+					'SSH preflight failed: remote path "' +
+						remoteRoot +
+						'" is not deployable. It must be an existing writable directory, ' +
+						'or (for a first deploy) its parent must exist and be writable so ' +
+						'rsync can create it. Check the path and the deploy user\'s permissions.'
+				);
+				process.exit( pathCode );
+			}
+
+			console.log( 'Remote path validated.' );
+		}
+
 		core.endGroup();
 	}
 } )();
