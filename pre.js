@@ -3,42 +3,106 @@
 	const core = require( '@actions/core' );
 	const fs = require( 'fs' );
 
-	if ( core.getInput( 'run-pre', { required: true } ) == 'false' ) {
-		return;
-	}
-
-	await exec.exec( 'mkdir', ['-p', '/home/runner/.ssh'] );
-	await exec.exec( 'touch', ['/home/runner/.ssh/known_hosts'] );
-
 	const remoteHost = core.getInput( 'env-host', { required: false } );
-	if( remoteHost != '' ) {
-		const remotePort = core.getInput( 'env-port', { required: false } );
-		await exec.exec( 'bash', ['-c', 'ssh-keyscan -p "' + remotePort + '" -H "' + remoteHost + '" >> /home/runner/.ssh/known_hosts' ] );
-	}
-
+	const remotePort = core.getInput( 'env-port', { required: false } );
+	const remoteUser = core.getInput( 'env-user', { required: false } );
 	const remoteKey = core.getInput( 'env-key', { required: false } );
-	if( remoteKey != '' ) {
-		const sock = '/tmp/ssh_agent.sock';
-		if( ! fs.existsSync( sock ) ) {
-			core.exportVariable( 'SSH_AUTH_SOCK', sock );
-			process.env['SSH_AUTH_SOCK'] = sock;
-			await exec.exec( 'ssh-agent', ['-a', sock] );
+	const remotePass = core.getInput( 'env-pass', { required: false } );
+	const shellParams = core.getInput( 'ssh-shell-params', { required: false } );
+	const sock = '/tmp/ssh_agent.sock';
+
+	// Credential setup is gated by run-pre: when deploy-ssh is invoked multiple
+	// times in a flow (e.g. consistency-check then push), later invocations pass
+	// run-pre=false to reuse the agent / known_hosts / sshpass left on the runner.
+	if ( core.getInput( 'run-pre', { required: true } ) != 'false' ) {
+		await exec.exec( 'mkdir', ['-p', '/home/runner/.ssh'] );
+		await exec.exec( 'touch', ['/home/runner/.ssh/known_hosts'] );
+
+		if( remoteHost != '' ) {
+			await exec.exec( 'bash', ['-c', 'ssh-keyscan -p "' + remotePort + '" -H "' + remoteHost + '" >> /home/runner/.ssh/known_hosts' ] );
 		}
 
-		var i = 0;
-		var keyPath;
-		do {
-			i++;
-			keyPath = '/home/runner/.ssh/github_actions_' + i;
-		} while	( fs.existsSync( keyPath ) );
+		if( remoteKey != '' ) {
+			if( ! fs.existsSync( sock ) ) {
+				core.exportVariable( 'SSH_AUTH_SOCK', sock );
+				process.env['SSH_AUTH_SOCK'] = sock;
+				await exec.exec( 'ssh-agent', ['-a', sock] );
+			}
 
-		await exec.exec( 'bash', ['-c', 'echo "' + remoteKey + '" > ' + keyPath ] );
-		await exec.exec( 'chmod', ['600', keyPath] );
-		await exec.exec( 'bash', ['-c', 'ssh-add ' + keyPath ] );
+			var i = 0;
+			var keyPath;
+			do {
+				i++;
+				keyPath = '/home/runner/.ssh/github_actions_' + i;
+			} while	( fs.existsSync( keyPath ) );
+
+			await exec.exec( 'bash', ['-c', 'echo "' + remoteKey + '" > ' + keyPath ] );
+			await exec.exec( 'chmod', ['600', keyPath] );
+			await exec.exec( 'bash', ['-c', 'ssh-add ' + keyPath ] );
+		}
+
+		if( remotePass != '' ) {
+			await exec.exec( 'sudo', ['apt-get', 'install', '-y', 'sshpass'] );
+		}
 	}
 
-	const remotePass = core.getInput( 'env-pass', { required: false } );
-	if( remotePass != '' ) {
-		await exec.exec( 'sudo', ['apt-get', 'install', '-y', 'sshpass'] );
+	// Preflight: validate the provided credentials with a cheap test connection.
+	// This runs on EVERY invocation (independent of run-pre) so auth/connectivity
+	// failures surface here with a clear message instead of a confusing rsync
+	// error mid-deploy. When run-pre=false the setup above was done by an earlier
+	// invocation and persists on the runner, so the test still works.
+	if (
+		core.getInput( 'preflight', { required: false } ) != 'false' &&
+		remoteHost != '' &&
+		( remoteKey != '' || remotePass != '' )
+	) {
+		core.startGroup( 'Validating SSH credentials.' );
+
+		const params = shellParams.split( ' ' ).filter( ( p ) => p !== '' );
+		if ( remotePort != '' ) {
+			params.push( '-p ' + remotePort );
+		}
+		// Fail fast on connection issues and auto-trust the host key (known_hosts
+		// may not have been populated yet when run-pre=false on a first call).
+		params.push( '-o ConnectTimeout=15' );
+		params.push( '-o StrictHostKeyChecking=accept-new' );
+
+		var shell;
+		if ( remotePass != '' ) {
+			// Password auth: feed the password via the SSHPASS env, never the CLI.
+			shell = 'sshpass -e ssh';
+			process.env['SSHPASS'] = remotePass;
+		} else {
+			// Key auth: never fall back to an interactive prompt (would hang).
+			shell = 'ssh';
+			params.push( '-o BatchMode=yes' );
+			// Make sure we point at the agent the setup step started, even when
+			// run-pre=false skipped exporting it into this process.
+			if ( ! process.env['SSH_AUTH_SOCK'] && fs.existsSync( sock ) ) {
+				process.env['SSH_AUTH_SOCK'] = sock;
+			}
+		}
+
+		const target = ( remoteUser != '' ? remoteUser + '@' : '' ) + remoteHost;
+		const command = shell + ' ' + params.join( ' ' ) + ' ' + target + ' true';
+
+		console.log( command );
+
+		const code = await exec.exec( command, [], { ignoreReturnCode: true } );
+
+		if ( code != 0 ) {
+			core.endGroup();
+			core.setFailed(
+				'SSH preflight failed: the provided ' +
+					( remotePass != '' ? 'password' : 'SSH key' ) +
+					' was rejected or the host is unreachable (exit code ' +
+					code +
+					'). Verify the credentials, host, port and that the key is authorized on the target.'
+			);
+			process.exit( code );
+		}
+
+		console.log( 'SSH credentials validated.' );
+		core.endGroup();
 	}
 } )();

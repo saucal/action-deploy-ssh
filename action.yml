@@ -73,6 +73,10 @@ inputs:
     description: "Pass a full path to a script that will be triggered right before the actual rsync command is executed"
     required: false
     default: ''
+  preflight:
+    description: "Validate SSH credentials (key or password) with a test connection in the pre step, on every invocation, before attempting any sync. Set to 'false' to disable."
+    required: false
+    default: 'true'
 runs:
   using: 'node16'
   main: 'main.js'
