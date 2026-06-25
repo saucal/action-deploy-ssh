@@ -22,6 +22,7 @@
 	const sshKey = core.getInput( 'env-key', { required: false } );
 	const sshPass = core.getInput( 'env-pass', { required: false } );
 	const consistencyCheck = core.getInput( 'consistency-check', { required: false } );
+	const preflight = core.getInput( 'preflight', { required: false } );
 
 	let ignoreList = core.getInput( 'force-ignore', { required: false } );
 	if ( ignoreList === 'false' ) {
@@ -120,6 +121,45 @@
 
 	if ( remotePort ) {
 		shellParams.push( '-p ' + remotePort );
+	}
+
+	// Preflight: validate the provided credentials with a cheap test connection
+	// before any rsync/consistency work, so auth failures surface with a clear
+	// message instead of a confusing rsync error mid-deploy.
+	if ( preflight !== 'false' ) {
+		console.log( '::group::Validating SSH credentials.' );
+
+		const preflightParams = shellParams.filter( ( p ) => p !== '' );
+		// Fail fast on connection issues instead of hanging.
+		preflightParams.push( '-o ConnectTimeout=15' );
+		if ( ! sshPass ) {
+			// Key auth: never fall back to an interactive password prompt (would hang).
+			preflightParams.push( '-o BatchMode=yes' );
+		}
+
+		const preflightCommand =
+			shell + ' ' + preflightParams.join( ' ' ) + ' ' + remoteTarget + ' true';
+
+		console.log( preflightCommand );
+
+		const preflightCode = await exec.exec( preflightCommand, [], {
+			ignoreReturnCode: true,
+		} );
+
+		if ( preflightCode != 0 ) {
+			console.log( '::endgroup::' );
+			core.setFailed(
+				'SSH preflight failed: the provided ' +
+					( sshPass ? 'password' : 'SSH key' ) +
+					' was rejected or the host is unreachable (exit code ' +
+					preflightCode +
+					'). Verify the credentials, host, port and that the key is authorized on the target.'
+			);
+			process.exit( preflightCode );
+		}
+
+		console.log( 'SSH credentials validated.' );
+		console.log( '::endgroup::' );
 	}
 
 	var rsync = new Rsync()
