@@ -277,7 +277,8 @@
 
 				await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
 					env: {
-						PATH_DIR: localRootRepo
+						PATH_DIR: localRootRepo,
+						IGNORE_LIST: ignoreListRepoRooted,
 					},
 					listeners: {
 						stdline: ( data ) => {
