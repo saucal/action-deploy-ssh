@@ -60,24 +60,22 @@
 	) {
 		core.startGroup( 'Validating SSH credentials.' );
 
-		const params = shellParams.split( ' ' ).filter( ( p ) => p !== '' );
-		if ( remotePort != '' ) {
-			params.push( '-p ' + remotePort );
-		}
-		// Fail fast on connection issues and auto-trust the host key (known_hosts
-		// may not have been populated yet when run-pre=false on a first call).
-		params.push( '-o ConnectTimeout=15' );
-		params.push( '-o StrictHostKeyChecking=accept-new' );
+		// Build the ssh invocation as an explicit argv array and call exec.exec in
+		// its array form (tool + args). The string form runs each argument through
+		// @actions/exec's tokenizer, which only honours double quotes and treats
+		// single quotes as literal characters - that mangles the remote-side test
+		// command below. Array form passes every argument verbatim, so the remote
+		// command reaches ssh as a single intact argument.
+		var tool;
+		const baseArgs = [];
 
-		var shell;
 		if ( remotePass != '' ) {
 			// Password auth: feed the password via the SSHPASS env, never the CLI.
-			shell = 'sshpass -e ssh';
+			tool = 'sshpass';
+			baseArgs.push( '-e', 'ssh' );
 			process.env['SSHPASS'] = remotePass;
 		} else {
-			// Key auth: never fall back to an interactive prompt (would hang).
-			shell = 'ssh';
-			params.push( '-o BatchMode=yes' );
+			tool = 'ssh';
 			// Make sure we point at the agent the setup step started, even when
 			// run-pre=false skipped exporting it into this process.
 			if ( ! process.env['SSH_AUTH_SOCK'] && fs.existsSync( sock ) ) {
@@ -85,12 +83,27 @@
 			}
 		}
 
+		// User-supplied ssh shell params (e.g. ProxyJump), each as its own token.
+		shellParams.split( ' ' ).filter( ( p ) => p !== '' ).forEach( ( p ) => baseArgs.push( p ) );
+		if ( remotePort != '' ) {
+			baseArgs.push( '-p', remotePort );
+		}
+		// Fail fast on connection issues and auto-trust the host key (known_hosts
+		// may not have been populated yet when run-pre=false on a first call).
+		baseArgs.push( '-o', 'ConnectTimeout=15' );
+		baseArgs.push( '-o', 'StrictHostKeyChecking=accept-new' );
+		if ( remotePass == '' ) {
+			// Key auth: never fall back to an interactive prompt (would hang).
+			baseArgs.push( '-o', 'BatchMode=yes' );
+		}
+
 		const target = ( remoteUser != '' ? remoteUser + '@' : '' ) + remoteHost;
-		const command = shell + ' ' + params.join( ' ' ) + ' ' + target + ' true';
+		baseArgs.push( target );
 
-		console.log( command );
+		const authArgs = baseArgs.concat( [ 'true' ] );
+		console.log( [ tool ].concat( authArgs ).join( ' ' ) );
 
-		const code = await exec.exec( command, [], { ignoreReturnCode: true } );
+		const code = await exec.exec( tool, authArgs, { ignoreReturnCode: true } );
 
 		if ( code != 0 ) {
 			core.endGroup();
@@ -111,20 +124,18 @@
 		// writable so rsync can create the final directory. Catches missing-path /
 		// wrong-permission misconfig here instead of as a confusing rsync error.
 		if ( remoteRoot != '' ) {
-			// Outer single quotes keep this as a single argument to ssh; inner double
-			// quotes handle the remote-side evaluation. dirname runs on the target.
+			// Passed as a single argv element, so it reaches the remote shell intact;
+			// the double quotes and dirname are evaluated on the target.
 			const remoteTest =
 				'test -d "' + remoteRoot + '" && test -w "' + remoteRoot + '" || ' +
 				'{ test ! -e "' + remoteRoot + '" && ' +
 				'test -d "$(dirname "' + remoteRoot + '")" && ' +
 				'test -w "$(dirname "' + remoteRoot + '")"; }';
 
-			const pathCommand =
-				shell + ' ' + params.join( ' ' ) + ' ' + target + " '" + remoteTest + "'";
+			const pathArgs = baseArgs.concat( [ remoteTest ] );
+			console.log( [ tool ].concat( pathArgs ).join( ' ' ) );
 
-			console.log( pathCommand );
-
-			const pathCode = await exec.exec( pathCommand, [], { ignoreReturnCode: true } );
+			const pathCode = await exec.exec( tool, pathArgs, { ignoreReturnCode: true } );
 
 			if ( pathCode != 0 ) {
 				core.endGroup();
