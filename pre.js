@@ -58,14 +58,20 @@
 		remoteHost != '' &&
 		( remoteKey != '' || remotePass != '' )
 	) {
-		core.startGroup( 'Validating SSH credentials.' );
+		core.startGroup( 'Validating SSH connection and remote path.' );
 
 		// Build the ssh invocation as an explicit argv array and call exec.exec in
 		// its array form (tool + args). The string form runs each argument through
 		// @actions/exec's tokenizer, which only honours double quotes and treats
-		// single quotes as literal characters - that mangles the remote-side test
-		// command below. Array form passes every argument verbatim, so the remote
-		// command reaches ssh as a single intact argument.
+		// single quotes as literal characters - that would mangle the remote script
+		// below. Array form passes every argument verbatim, so the script reaches
+		// ssh as a single intact argument.
+		//
+		// Note: we deliberately pass the script as one ssh argument rather than
+		// piping it over stdin. sshpass drives ssh through a pty to inject the
+		// password and does not forward our stdin to the remote command, so a
+		// stdin-fed script would break password auth. A single argv element works
+		// for both key and password auth.
 		var tool;
 		const baseArgs = [];
 
@@ -100,58 +106,66 @@
 		const target = ( remoteUser != '' ? remoteUser + '@' : '' ) + remoteHost;
 		baseArgs.push( target );
 
-		const authArgs = baseArgs.concat( [ 'true' ] );
-		console.log( [ tool ].concat( authArgs ).join( ' ' ) );
+		// Single remote script covering every check. Connecting at all already
+		// proves auth + connectivity; the script then verifies the remote root is
+		// deployable: an existing writable directory, or (for a first deploy) a
+		// path whose parent exists and is writable so rsync can create the final
+		// directory. Distinct exit codes / PREFLIGHT_FAIL lines give a precise
+		// reason. The root is embedded inside a single-quoted assignment (with
+		// single quotes escaped) so any path is safe from remote-shell parsing.
+		const safeRoot = "'" + remoteRoot.replace( /'/g, "'\\''" ) + "'";
+		const script = [
+			'set -u',
+			'root=' + safeRoot,
+			'if [ -n "$root" ]; then',
+			'  if [ -d "$root" ]; then',
+			'    [ -w "$root" ] || { echo "PREFLIGHT_FAIL:remote path exists but is not writable"; exit 11; }',
+			'  elif [ -e "$root" ]; then',
+			'    echo "PREFLIGHT_FAIL:remote path exists but is not a directory"; exit 12',
+			'  else',
+			'    parent=$(dirname "$root")',
+			'    [ -d "$parent" ] || { echo "PREFLIGHT_FAIL:remote path is missing and its parent does not exist"; exit 13; }',
+			'    [ -w "$parent" ] || { echo "PREFLIGHT_FAIL:remote path is missing and its parent is not writable"; exit 14; }',
+			'  fi',
+			'fi',
+			'echo PREFLIGHT_OK',
+		].join( '\n' );
 
-		const code = await exec.exec( tool, authArgs, { ignoreReturnCode: true } );
+		const args = baseArgs.concat( [ script ] );
+		console.log( [ tool ].concat( baseArgs ).join( ' ' ) + ' <remote preflight script>' );
+
+		let output = '';
+		const code = await exec.exec( tool, args, {
+			ignoreReturnCode: true,
+			listeners: {
+				stdout: ( data ) => { output += data.toString(); },
+				stderr: ( data ) => { output += data.toString(); },
+			},
+		} );
 
 		if ( code != 0 ) {
 			core.endGroup();
-			core.setFailed(
-				'SSH preflight failed: the provided ' +
-					( remotePass != '' ? 'password' : 'SSH key' ) +
-					' was rejected or the host is unreachable (exit code ' +
-					code +
-					'). Verify the credentials, host, port and that the key is authorized on the target.'
-			);
+			const failMatch = output.match( /PREFLIGHT_FAIL:(.*)/ );
+			if ( failMatch ) {
+				// Reached the remote shell, so auth/connectivity was fine: a check failed.
+				core.setFailed(
+					'SSH preflight failed: ' + failMatch[ 1 ].trim() +
+						' (remote path "' + remoteRoot + '"). Check the path and the ' +
+						'deploy user\'s permissions.'
+				);
+			} else {
+				// Never reached the script: connection or authentication problem.
+				core.setFailed(
+					'SSH preflight failed: could not connect or authenticate to ' + target +
+						' (exit code ' + code + '). The ' +
+						( remotePass != '' ? 'password' : 'SSH key' ) +
+						' was rejected, or the host/port is unreachable.'
+				);
+			}
 			process.exit( code );
 		}
 
-		console.log( 'SSH credentials validated.' );
-
-		// Validate that the remote root is deployable: either an existing writable
-		// directory, or (for a first deploy) a path whose parent exists and is
-		// writable so rsync can create the final directory. Catches missing-path /
-		// wrong-permission misconfig here instead of as a confusing rsync error.
-		if ( remoteRoot != '' ) {
-			// Passed as a single argv element, so it reaches the remote shell intact;
-			// the double quotes and dirname are evaluated on the target.
-			const remoteTest =
-				'test -d "' + remoteRoot + '" && test -w "' + remoteRoot + '" || ' +
-				'{ test ! -e "' + remoteRoot + '" && ' +
-				'test -d "$(dirname "' + remoteRoot + '")" && ' +
-				'test -w "$(dirname "' + remoteRoot + '")"; }';
-
-			const pathArgs = baseArgs.concat( [ remoteTest ] );
-			console.log( [ tool ].concat( pathArgs ).join( ' ' ) );
-
-			const pathCode = await exec.exec( tool, pathArgs, { ignoreReturnCode: true } );
-
-			if ( pathCode != 0 ) {
-				core.endGroup();
-				core.setFailed(
-					'SSH preflight failed: remote path "' +
-						remoteRoot +
-						'" is not deployable. It must be an existing writable directory, ' +
-						'or (for a first deploy) its parent must exist and be writable so ' +
-						'rsync can create it. Check the path and the deploy user\'s permissions.'
-				);
-				process.exit( pathCode );
-			}
-
-			console.log( 'Remote path validated.' );
-		}
-
+		console.log( 'SSH connection and remote path validated.' );
 		core.endGroup();
 	}
 } )();
