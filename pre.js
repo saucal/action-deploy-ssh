@@ -106,30 +106,23 @@
 		const target = ( remoteUser != '' ? remoteUser + '@' : '' ) + remoteHost;
 		baseArgs.push( target );
 
-		// Single remote script covering every check. Connecting at all already
-		// proves auth + connectivity; the script then verifies the remote root is
-		// deployable: an existing writable directory, or (for a first deploy) a
-		// path whose parent exists and is writable so rsync can create the final
-		// directory. Distinct exit codes / PREFLIGHT_FAIL lines give a precise
-		// reason. The root is embedded inside a single-quoted assignment (with
-		// single quotes escaped) so any path is safe from remote-shell parsing.
-		const safeRoot = "'" + remoteRoot.replace( /'/g, "'\\''" ) + "'";
-		const script = [
-			'set -u',
-			'root=' + safeRoot,
-			'if [ -n "$root" ]; then',
-			'  if [ -d "$root" ]; then',
-			'    [ -w "$root" ] || { echo "PREFLIGHT_FAIL:remote path exists but is not writable"; exit 11; }',
-			'  elif [ -e "$root" ]; then',
-			'    echo "PREFLIGHT_FAIL:remote path exists but is not a directory"; exit 12',
-			'  else',
-			'    parent=$(dirname "$root")',
-			'    [ -d "$parent" ] || { echo "PREFLIGHT_FAIL:remote path is missing and its parent does not exist"; exit 13; }',
-			'    [ -w "$parent" ] || { echo "PREFLIGHT_FAIL:remote path is missing and its parent is not writable"; exit 14; }',
-			'  fi',
-			'fi',
-			'echo PREFLIGHT_OK',
-		].join( '\n' );
+		// Single-line remote check: every statement separated by ';', never by
+		// newlines. Some SSH gateways (e.g. WP Engine's Go gateway) flatten the
+		// exec command - collapsing all whitespace and stripping quotes before
+		// running it through bash -c - so a newline-separated script fuses into
+		// one broken line. A ';'-joined one-liner survives that and still runs on
+		// a normal shell. Connecting at all already proves auth + connectivity;
+		// this checks the remote root is deployable: an existing writable
+		// directory, or (for a first deploy) a writable parent so rsync can
+		// create it. Paths are assumed free of spaces (true for hosting roots),
+		// since the gateway strips the quotes that would otherwise protect them.
+		const script =
+			"root='" + remoteRoot.replace( /'/g, "'\\''" ) + "'; " +
+			'if [ -z "$root" ] || ' +
+			'{ [ -d "$root" ] && [ -w "$root" ]; } || ' +
+			'{ [ ! -e "$root" ] && [ -d "$(dirname "$root")" ] && [ -w "$(dirname "$root")" ]; }; ' +
+			'then echo PREFLIGHT_OK; ' +
+			'else echo "PREFLIGHT_FAIL:remote path not deployable - need an existing writable directory, or a writable parent for a first deploy"; exit 11; fi';
 
 		const args = baseArgs.concat( [ script ] );
 		console.log( [ tool ].concat( baseArgs ).join( ' ' ) + ' <remote preflight script>' );
