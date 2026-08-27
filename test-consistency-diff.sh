@@ -20,6 +20,8 @@ write_fixtures() { # $1 = generation marker
   # mixed.js: one short changed line next to a minified one -> the diff must survive,
   # with only the long line truncated. ctx-* must never print (they are -U0 context).
   { echo "ctx-top"; echo "short-$1"; printf 'var m=%s;%s\n' "$1" "$big"; echo "ctx-bottom"; } > mixed.js
+  # short.php: nothing truncated, so its header must stay a plain "diff --git".
+  { echo "ctx-top"; echo "value-$1"; echo "ctx-bottom"; } > short.php
 }
 
 write_fixtures 0
@@ -48,11 +50,15 @@ echo "$out"
 grep -q '^@@' <<< "$out" || fail "no hunk header"
 if grep -qE '^ (keep-|ctx-)' <<< "$out"; then fail "context lines present"; fi
 
-# All changed lines minified -> one line, no body.
-grep -q '^diff --git --simple LL min.js$' <<< "$out" || fail "min.js not collapsed to LL"
-if grep -q 'var a=' <<< "$out"; then fail "collapsed file leaked its body"; fi
+# A truncated line makes the diff unapplicable, so the file marker is tagged and the
+# body still prints. An untruncated file keeps the plain header.
+grep -q '^diff --git --simple LL b/min.js a/min.js$' <<< "$out" || fail "min.js header not tagged LL"
+grep -q '^diff --git --simple LL b/mixed.js a/mixed.js$' <<< "$out" || fail "mixed.js header not tagged LL"
+grep -q '^diff --git b/short.php a/short.php$' <<< "$out" || fail "short.php header should not be tagged"
+grep -q '^-value-2$' <<< "$out" || fail "short.php body missing"
+grep -q '^-var a=2;.*\[target line, .* truncated\]$' <<< "$out" || fail "min.js body missing"
 
-# One short changed line -> diff survives, only the long line is truncated.
+# A short changed line beside a minified one still prints in full.
 grep -q '^-short-2$' <<< "$out" || fail "mixed.js short target line missing"
 grep -q '^+short-1$' <<< "$out" || fail "mixed.js short build line missing"
 grep -q '^-var m=2;.*\[target line, .* truncated\]$' <<< "$out" || fail "mixed.js target line not truncated"
@@ -73,7 +79,7 @@ if grep -q 'plain.txt' <<< "$out"; then fail "unchanged file listed"; fi
 prev="$(PATH_DIR="$tmp" bash "$here/consistency-diff.sh" HEAD~1)"
 grep -q '^+var m=0;.*\[build line, .* truncated\]$' <<< "$prev" || fail "HEAD~1 build side mislabeled"
 grep -q '^-var m=2;.*\[target line, .* truncated\]$' <<< "$prev" || fail "HEAD~1 target side mislabeled"
-grep -q '^diff --git --simple LL min.js$' <<< "$prev" || fail "HEAD~1 min.js not collapsed to LL"
+grep -q '^diff --git --simple LL b/min.js a/min.js$' <<< "$prev" || fail "HEAD~1 min.js header not tagged LL"
 if grep -qE '^ (keep-|ctx-)' <<< "$prev"; then fail "HEAD~1 kept context lines"; fi
 
 echo "OK"
