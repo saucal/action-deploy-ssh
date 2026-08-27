@@ -32,6 +32,7 @@
 # Plugin Specific directories 
 /updraft/
 /wp-rocket-config/
+/plugins/wp-rocket/licence-data.php
 /ai1wm-backups/
 /cache/
 /jetpack-waf/
