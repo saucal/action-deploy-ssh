@@ -37,7 +37,21 @@ git --no-pager diff -R -M --name-status "$REF" | while read status file; do
       echo diff --git --simple WS "$file"
       continue
     fi
-    git --no-pager diff -R -M -U0 "$REF" -- "$file" | LC_ALL=C awk -v max="$MAX_LINE" '
+    # A minified bundle changes one or two lines, and both are the whole file. Truncating
+    # them leaves 300 bytes of unreadable prefix per side and nothing learned, so when
+    # EVERY changed line is over the limit the file collapses the way WS does. A file with
+    # even one short changed line keeps its diff — that line is the readable part.
+    body="$(git --no-pager diff -R -M -U0 "$REF" -- "$file")"
+    read -r changed long <<< "$(printf '%s\n' "$body" | LC_ALL=C awk -v max="$MAX_LINE" '
+      /^[+-]/ && !/^(\+\+\+|---) / { changed++; if (length($0) > max) long++ }
+      END { print changed + 0, long + 0 }
+    ')"
+    if [ "$changed" -gt 0 ] && [ "$changed" -eq "$long" ]; then
+      echo diff --git --simple LL "$file"
+      continue
+    fi
+
+    printf '%s\n' "$body" | LC_ALL=C awk -v max="$MAX_LINE" '
       # LC_ALL=C so length()/substr() count bytes, matching the reported size.
       # "diff --git" is left alone: downstream tooling parses it as the file marker.
       length($0) > max && $0 !~ /^diff --git / {

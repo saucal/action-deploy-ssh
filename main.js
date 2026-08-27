@@ -248,7 +248,9 @@
 				'#   A very long line is cut short and annotated with its real size:\n' +
 				'#       -<start of the line>... [target line, 39.1 KB, truncated]\n' +
 				'#   Minified css/js is one line of tens of KB; printed whole it\n' +
-				'#   buries every other change in the file.\n' +
+				'#   buries every other change in the file. If EVERY changed line in\n' +
+				'#   a file is that long there is nothing readable left, so the file\n' +
+				'#   collapses to a single LL line instead (see below).\n' +
 				'#\n' +
 				'#   A file with no body worth printing is one line instead:\n' +
 				'#       diff --git --simple <status> <path>\n' +
@@ -259,6 +261,12 @@
 				'#          content is identical. Usually a file edited on the server\n' +
 				'#          over FTP/SFTP, which rewrote its line endings. Still real\n' +
 				'#          drift — the byte contents differ — but nothing to read.\n' +
+				"#     LL = every changed line is longer than the print limit, i.e. a\n" +
+				'#          minified css/js bundle rebuilt on one side. Real drift with\n' +
+				'#          no readable body; diff the file directly if you need it.\n' +
+				'#\n' +
+				'#   WS and LL are content modifications like any other file below —\n' +
+				'#   only their bodies are omitted, because those bodies say nothing.\n' +
 				'##################################################################\n\n';
 
 			var headerCurrent =
@@ -343,9 +351,10 @@
 				'The diffs are condensed, not patches. They carry no context lines, a very\n' +
 				'long line (minified css/js) is cut short and annotated with its real size,\n' +
 				'and a file with no body worth printing is reduced to a single\n' +
-				"'diff --git --simple <status> <path>' line — including WS, a file that\n" +
-				'differs only in line endings or indentation. Each diff file has a header\n' +
-				'explaining exactly what it compares and how to read the condensed form.\n';
+				"'diff --git --simple <status> <path>' line — including WS (differs only in\n" +
+				'line endings or indentation) and LL (every changed line is too long to\n' +
+				'print). Each diff file has a header explaining exactly what it compares and\n' +
+				'how to read the condensed form.\n';
 			fs.writeFileSync( path.join( diff_path, 'README.txt' ), readme );
 
 			return diff_path;
