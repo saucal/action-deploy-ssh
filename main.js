@@ -33,6 +33,18 @@
 	}
 	// Comments, blanks and duplicates are dropped by the parser.
 	const ignoreRules = rsyncRulesFormatter.parse( ignoreList );
+
+	// A line shaped like `keyword pattern` naming no known keyword is almost always a
+	// typo'd protect/hide. It degrades to an exclude matching nothing, which fails
+	// silently AND destructively, so say so loudly.
+	const suspectRules = ignoreRules.filter( ( rule ) => rule.suspect );
+	if ( suspectRules.length ) {
+		core.warning(
+			'Ignore list: ' + suspectRules.length + ' rule(s) look like a mistyped ' +
+			'protect/hide/show/risk prefix and are being treated as literal paths: ' +
+			suspectRules.map( ( rule ) => '"' + rule.pattern + '"' ).join( ', ' )
+		);
+	}
 	let ignoreRulesRepoRooted = ignoreRules;
 
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
