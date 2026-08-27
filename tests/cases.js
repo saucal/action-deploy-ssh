@@ -302,6 +302,44 @@ module.exports = [
 		},
 	},
 
+	{
+		// 31 rules across the fleet have a wildcard in a directory segment
+		// (/saucal_migration_*/, /plugins/*/node_modules/). The subtree expansion has to
+		// survive the wildcard.
+		name: 'a wildcard directory segment still excludes the whole subtree',
+		rules: `
+			/saucal_migration_*/
+			/plugins/*/node_modules/
+		`,
+		send: {
+			'/saucal_migration_20240101/dump.sql': 'IGNORED',
+			'/plugins/acme/node_modules/dep.js': 'IGNORED',
+			'/plugins/acme/acme.php': 'SENT',
+		},
+	},
+	{
+		name: 'protect and hide work on a wildcard directory segment',
+		rules: `
+			protect /plugins/*/uploads/
+			hide /plugins/*/cache/
+		`,
+		send: { '/plugins/acme/acme.php': 'SENT' },
+		remote: {
+			'/plugins/acme/uploads/user.pdf': 'KEPT',
+			'/plugins/acme/cache/stale.php': 'DELETED',
+		},
+	},
+	{
+		name: 'a wildcard mid-path is anchored like the rest of the pattern',
+		rules: `
+			/plugins/acme/vendor/*/tests/
+		`,
+		send: {
+			'/plugins/acme/vendor/lib/tests/t.php': 'IGNORED',
+			'/plugins/acme/vendor/lib/src/s.php': 'SENT',
+		},
+	},
+
 	// ------------------------------------- regressions caught in review
 	{
 		// Written protect-FIRST. Reverse-authoring order alone would put the include
