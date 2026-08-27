@@ -250,6 +250,13 @@
 				'#   Minified css/js is one line of tens of KB; printed whole it\n' +
 				'#   buries every other change in the file.\n' +
 				'#\n' +
+				'#   Any file that lost bytes this way is flagged in its own header:\n' +
+				'#       diff --git --simple LL b/<path> a/<path>\n' +
+				'#   LL = long lines. The diff below it is still complete in WHICH\n' +
+				'#   lines changed — every one is listed — but the content of the\n' +
+				'#   long ones is cut, so that file will not apply as a patch. An\n' +
+				'#   untagged header means nothing was cut from that file.\n' +
+				'#\n' +
 				'#   A file with no body worth printing is one line instead:\n' +
 				'#       diff --git --simple <status> <path>\n' +
 				"#     A  = exists in the BUILD only    (deploy would create it)\n" +
@@ -259,6 +266,9 @@
 				'#          content is identical. Usually a file edited on the server\n' +
 				'#          over FTP/SFTP, which rewrote its line endings. Still real\n' +
 				'#          drift — the byte contents differ — but nothing to read.\n' +
+				'#\n' +
+				'#   WS is a content modification like any other file below — only\n' +
+				'#   its body is omitted, because that body says nothing.\n' +
 				'##################################################################\n\n';
 
 			var headerCurrent =
@@ -343,9 +353,11 @@
 				'The diffs are condensed, not patches. They carry no context lines, a very\n' +
 				'long line (minified css/js) is cut short and annotated with its real size,\n' +
 				'and a file with no body worth printing is reduced to a single\n' +
-				"'diff --git --simple <status> <path>' line — including WS, a file that\n" +
-				'differs only in line endings or indentation. Each diff file has a header\n' +
-				'explaining exactly what it compares and how to read the condensed form.\n';
+				"'diff --git --simple <status> <path>' line — including WS, a file differing\n" +
+				'only in line endings or indentation. A file that had bytes cut from a long\n' +
+				"line is flagged 'diff --git --simple LL ...' in its own header and will not\n" +
+				'apply as a patch. Each diff file has a header explaining exactly what it\n' +
+				'compares and how to read the condensed form.\n';
 			fs.writeFileSync( path.join( diff_path, 'README.txt' ), readme );
 
 			return diff_path;

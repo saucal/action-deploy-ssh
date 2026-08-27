@@ -37,9 +37,20 @@ git --no-pager diff -R -M --name-status "$REF" | while read status file; do
       echo diff --git --simple WS "$file"
       continue
     fi
-    git --no-pager diff -R -M -U0 "$REF" -- "$file" | LC_ALL=C awk -v max="$MAX_LINE" '
+    # Truncating a line makes the diff unapplicable, so the file marker says so: its
+    # header becomes "diff --git --simple LL b/... a/...", reusing the --simple tag
+    # vocabulary. Dropping a byte is invisible further down — a reader who tries to patch
+    # from this has to be told at the top of the file, not left to spot a "truncated".
+    body="$(git --no-pager diff -R -M -U0 "$REF" -- "$file")"
+    long="$(printf '%s\n' "$body" | LC_ALL=C awk -v max="$MAX_LINE" '
+      /^[+-]/ && !/^(\+\+\+|---) / && length($0) > max { n++ }
+      END { print n + 0 }
+    ')"
+
+    printf '%s\n' "$body" | LC_ALL=C awk -v max="$MAX_LINE" -v long="$long" '
       # LC_ALL=C so length()/substr() count bytes, matching the reported size.
-      # "diff --git" is left alone: downstream tooling parses it as the file marker.
+      long && /^diff --git / { sub(/^diff --git /, "diff --git --simple LL "); print; next }
+      # The file marker is never truncated: downstream tooling parses it as the path.
       length($0) > max && $0 !~ /^diff --git / {
         c = substr($0, 1, 1)
         printf "%s... [%s line, %.1f KB, truncated]\n", substr($0, 1, max), \
