@@ -66,23 +66,29 @@ function survivors( rules, localPaths, remotePaths ) {
 	remotePaths.forEach( ( p ) => writeFile( dst, p, 'on-server' ) );
 	fs.writeFileSync( path.join( dir, 'rules' ), rules );
 
-	// Mirrors the real deploy: -a with --delete.
+	// Mirrors the real deploy, which runs `avrcz` -- the -c matters: without it rsync's
+	// size+mtime quick check skips same-size files and an overwrite silently no-ops.
 	rsync( [
-		'-a', '--delete',
+		'-a', '-c', '--delete',
 		'--filter=merge ' + path.join( dir, 'rules' ),
 		src + '/', dst + '/',
 	] );
 
 	const alive = new Set();
+	const content = new Map();
 	( function walk( d ) {
 		for ( const e of fs.readdirSync( d, { withFileTypes: true } ) ) {
 			const full = path.join( d, e.name );
 			if ( e.isDirectory() ) walk( full );
-			else alive.add( '/' + path.relative( dst, full ) );
+			else {
+				const rel = '/' + path.relative( dst, full );
+				alive.add( rel );
+				content.set( rel, fs.readFileSync( full, 'utf8' ).trim() );
+			}
 		}
 	} )( dst );
 	fs.rmSync( dir, { recursive: true, force: true } );
-	return alive;
+	return { alive, content };
 }
 
 for ( const c of cases ) {
@@ -107,13 +113,30 @@ for ( const c of cases ) {
 	}
 
 	if ( c.remote ) {
-		// Local files the case declares as SENT must exist, or "overwrite" cannot be tested.
-		const local = Object.entries( c.send || {} )
-			.filter( ( [ , v ] ) => v === 'SENT' ).map( ( [ k ] ) => k );
-		const alive = survivors( rules, local, Object.keys( c.remote ) );
-		for ( const [ p, want ] of Object.entries( c.remote ) ) {
-			const got = alive.has( p ) ? 'KEPT' : 'DELETED';
-			if ( got !== want ) errors.push( `remote ${ p }: want ${ want }, got ${ got }` );
+		// Whatever the case says exists in the build dir. Without this the source tree is
+		// empty, rsync --delete wipes the target wholesale, and every DELETED assertion
+		// passes no matter what the filter says -- a vacuous test that looks green.
+		const local = ( c.local || [] ).concat(
+			Object.entries( c.send || {} ).filter( ( [ , v ] ) => v === 'SENT' ).map( ( [ k ] ) => k )
+		);
+
+		if ( ! local.length ) {
+			errors.push(
+				'this case asserts on `remote` but nothing exists locally, so rsync --delete ' +
+				'would empty the target and the assertion would hold for any filter. ' +
+				'Add `local: [ ... ]` or a `send` entry marked SENT.'
+			);
+		} else {
+			const { alive, content } = survivors( rules, local, Object.keys( c.remote ) );
+			for ( const [ p, want ] of Object.entries( c.remote ) ) {
+				let got = alive.has( p ) ? 'KEPT' : 'DELETED';
+				// OVERWRITTEN distinguishes "we replaced their copy" from "we left it alone",
+				// which KEPT on its own cannot.
+				if ( got === 'KEPT' && want === 'OVERWRITTEN' ) {
+					got = content.get( p ) === 'from-repo' ? 'OVERWRITTEN' : 'KEPT';
+				}
+				if ( got !== want ) errors.push( `remote ${ p }: want ${ want }, got ${ got }` );
+			}
 		}
 	}
 
@@ -134,7 +157,21 @@ const rr = formatter.parse( '/vendor/\n!/vendor/composer\nnode_modules/\n' );
 unit(
 	'reroot: anchored patterns gain the subdirectory prefix',
 	formatter.format( formatter.reroot( rr, 'wp-content' ) ),
-	'+ /wp-content/vendor/composer\n- /wp-content/vendor/\n- node_modules/'
+	'+ /wp-content/vendor/composer\n- node_modules/\n- /wp-content/vendor/'
+);
+unit(
+	// Regression: reroot used to rescore, which re-ranked anchored rules against
+	// unanchored ones. main.js builds the rsync filter from the UN-rerooted rules and the
+	// gitignore views from the rerooted ones, so rescoring made the manifest check
+	// disagree with what rsync actually did, and failed the deploy.
+	'reroot: rule order survives re-rooting',
+	formatter.format( formatter.reroot( rr, 'wp-content' ) ).replace( /\/wp-content/g, '' ),
+	formatter.format( rr )
+);
+unit(
+	'reroot + toGitignore: the manifest view keeps the filter\'s ordering',
+	formatter.toGitignore( formatter.reroot( formatter.parse( '!/plugins/\nnode_modules/\n' ), 'wp-content' ), 'not-sent' ),
+	'!/wp-content/plugins/\n!/wp-content/plugins/**\nnode_modules/'
 );
 unit(
 	'reroot: unanchored patterns are left alone',

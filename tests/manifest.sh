@@ -14,12 +14,15 @@ run() {
 	printf '%s' "$rsyncm" > "$work/rsync-manifest"
 
 	# Derive the three views the same way main.js does.
-	local sides; sides="$( node -e "
+	local sides
+	if ! sides="$( node -e "
 		const F = require('$ACTION_DIR/rsyncRulesFormatter');
 		const r = F.parse(process.argv[1]);
 		for (const s of ['not-sent','not-deleted','hidden'])
 			console.log('---' + s + '---\n' + F.toGitignore(r, s));
-	" "$rules" )"
+	" -- "$rules" )"; then
+		fail=$((fail+1)); echo "FAIL  $name: could not derive gitignore sides"; rm -rf "$work"; return
+	fi
 	local not_sent not_deleted hidden
 	not_sent="$(   sed -n '/^---not-sent---$/,/^---not-deleted---$/p'  <<< "$sides" | sed '1d;$d' )"
 	not_deleted="$(sed -n '/^---not-deleted---$/,/^---hidden---$/p'    <<< "$sides" | sed '1d;$d' )"
@@ -78,6 +81,24 @@ hide /old-plugin/' \
 ' \
 	'plugins/acme/acme.php
 deleting old-plugin/leftover.php
+' MATCH
+
+run "hidden path that git still tracks is forgiven on the send side" \
+	'hide /old-plugin/' \
+	'+ old-plugin/x.php
++ plugins/acme/acme.php
+' \
+	'plugins/acme/acme.php
+' MATCH
+
+# Without the -x in `grep -vxF`, an ignored path that is a PREFIX of another manifest
+# entry would drag that entry out of the comparison too, and the deploy would fail.
+run "an ignored path does not drag its prefix-siblings out of the comparison" \
+	'/vendor/autoload.php' \
+	'+ vendor/autoload.php
++ vendor/autoload.php.bak
+' \
+	'vendor/autoload.php.bak
 ' MATCH
 
 run "REAL drift still fails: rsync deletes something unexplained" \

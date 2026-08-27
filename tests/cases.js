@@ -1,7 +1,10 @@
 // Behavioural fixtures for the ignore-list -> rsync-filter translation.
 //
 // `send`   : path in the build dir -> SENT (rsync transfers it) | IGNORED (it does not)
-// `remote` : path that already exists on the target -> KEPT | DELETED (under --delete)
+// `remote` : path that already exists on the target -> KEPT | DELETED | OVERWRITTEN
+// `local`  : extra paths that exist in the build dir. Needed whenever a case asserts on
+//            `remote` but sends nothing, because rsync --delete against an EMPTY source
+//            wipes the target wholesale and every DELETED assertion would pass for free.
 //
 // Cases marked `gitDiffers` are places where we knowingly do NOT match `git check-ignore`.
 // They are pinned deliberately: real ignore lists in the fleet depend on the current
@@ -156,6 +159,8 @@ module.exports = [
 		`,
 		send: { '/mu-plugins/ours.php': 'SENT' },
 		remote: {
+			// Their stale copy of a file we DO ship must actually be replaced.
+			'/mu-plugins/ours.php': 'OVERWRITTEN',
 			'/mu-plugins/hand-placed.php': 'KEPT',
 			'/mu-plugins/nested/theirs.php': 'KEPT',
 			'/other/stale.php': 'DELETED',
@@ -180,6 +185,7 @@ module.exports = [
 		rules: `
 			hide /old-plugin/
 		`,
+		local: [ '/keep.php' ],
 		send: { '/old-plugin/x.php': 'IGNORED' },
 		remote: { '/old-plugin/leftover.php': 'DELETED' },
 	},
@@ -189,6 +195,7 @@ module.exports = [
 			/excluded/
 			hide /hidden/
 		`,
+		local: [ '/keep.php' ],
 		send: {
 			'/excluded/x.php': 'IGNORED',
 			'/hidden/x.php': 'IGNORED',
@@ -219,8 +226,9 @@ module.exports = [
 		send: { '/legacy/keep.php': 'IGNORED' },
 	},
 	{
-		name: '--delete only removes inside directories rsync is transferring',
+		name: 'hide: an extraneous directory is removed whole, contents included',
 		rules: `hide /gone/`,
+		local: [ '/keep.php' ],
 		// Nothing local under /gone, so rsync never descends and never deletes inside it.
 		// The directory itself is still removed, because it is extraneous at the root.
 		remote: { '/gone/deep/leftover.php': 'DELETED' },
@@ -266,6 +274,85 @@ module.exports = [
 			'/a/tmp/junk.php': 'DELETED',
 			'/b/stale.php': 'DELETED',
 		},
+	},
+
+	{
+		// If `show` emitted "+" instead of "S", keep.php would lose the exclude's
+		// delete-protection on the receiver and be removed. S is sender-side only.
+		name: 'show is sender-side only, unlike an include',
+		rules: `
+			/legacy/*
+			show /legacy/keep.php
+		`,
+		local: [ '/keep.php' ],
+		send: { '/legacy/other.php': 'IGNORED' },
+		remote: { '/legacy/keep.php': 'KEPT' },
+	},
+	{
+		// The hide must reach the CONTENTS for the subtree expansion to matter: "*" does
+		// not cross "/", so `hide /legacy/*` would leave keep/a.php unmatched either way.
+		name: 'show on a directory brings its contents',
+		rules: `
+			hide /legacy/**
+			show /legacy/keep/
+		`,
+		send: {
+			'/legacy/keep/a.php': 'SENT',
+			'/legacy/drop/b.php': 'IGNORED',
+		},
+	},
+
+	// ------------------------------------- regressions caught in review
+	{
+		// Written protect-FIRST. Reverse-authoring order alone would put the include
+		// first, and an include tells the delete pass the path is fair game -- so this
+		// only passes because of the kind precedence in sortRules.
+		name: 'protect still wins when written BEFORE the include it is paired with',
+		rules: `
+			/*
+			protect /mu-plugins/
+			!/mu-plugins/
+		`,
+		send: { '/mu-plugins/ours.php': 'SENT' },
+		remote: { '/mu-plugins/hand-placed.php': 'KEPT' },
+	},
+	{
+		// The delete pass ignores H rules entirely, so an exclude on the same path still
+		// protects it. Adding `hide` next to an existing exclude does NOT start cleaning
+		// up -- the exclude has to go. Easy to get wrong, so pin it.
+		name: 'an exclude on the same path still protects it, even alongside a hide',
+		rules: `
+			/uploads/
+			hide /uploads/
+		`,
+		local: [ '/keep.php' ],
+		remote: { '/uploads/stale.jpg': 'KEPT' },
+	},
+	{
+		name: 'hide alone (no competing exclude) does clean up',
+		rules: `
+			hide /uploads/
+		`,
+		local: [ '/keep.php' ],
+		remote: { '/uploads/stale.jpg': 'DELETED' },
+	},
+	{
+		name: 'a mistyped prefix is treated as a literal path, not silently as protect',
+		rules: `
+			Protect /mu-plugins/
+		`,
+		// Case-insensitive now, so this really does protect.
+		send: { '/mu-plugins/ours.php': 'SENT' },
+		remote: { '/mu-plugins/hand-placed.php': 'KEPT' },
+	},
+	{
+		// Distinguishes the asterisks-only score (5) from asterisks-plus-chars (10).
+		name: 'a glob with characters is more specific than a bare glob',
+		rules: `
+			/a/*
+			!/a/*.php
+		`,
+		send: { '/a/keep.php': 'SENT', '/a/drop.txt': 'IGNORED' },
 	},
 
 	// ------------------------------------------------------------- hygiene

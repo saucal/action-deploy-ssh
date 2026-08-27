@@ -33,11 +33,14 @@ const KINDS = {
 	show:    { code: 'S', subtree: true,  precedence: 1 },
 };
 
+// Looked up case-insensitively: `Protect` used to fall through to an exclude whose
+// pattern contained a space, which matches nothing -- so a capitalised keyword silently
+// dropped the protection and let --delete remove the files it was meant to keep.
 const PREFIXES = {
-	protect: 'protect', P: 'protect',
-	risk:    'risk',    R: 'risk',
-	hide:    'hide',    H: 'hide',
-	show:    'show',    S: 'show',
+	protect: 'protect', p: 'protect',
+	risk:    'risk',    r: 'risk',
+	hide:    'hide',    h: 'hide',
+	show:    'show',    s: 'show',
 };
 
 // How specific is this pattern? Used to order rules, most specific first.
@@ -63,16 +66,23 @@ function getRuleSpecificity( pattern ) {
 function parseRule( line ) {
 	let rule = line.trim();
 	let kind = 'exclude';
+	let suspect = false;
 
 	if ( rule.startsWith( '\\' ) ) {
 		// Escaped: everything after the backslash is a literal path.
 		rule = rule.slice( 1 );
 	} else {
-		const prefix = rule.match( /^([A-Za-z]+)[ \t]+(.*)$/ );
+		const prefix = rule.match( /^([A-Za-z]+)[ \t]+(\S.*)$/ );
+		const keyword = prefix && PREFIXES[ prefix[ 1 ].toLowerCase() ];
 
-		if ( prefix && PREFIXES[ prefix[ 1 ] ] ) {
-			kind = PREFIXES[ prefix[ 1 ] ];
+		if ( keyword ) {
+			kind = keyword;
 			rule = prefix[ 2 ].trim();
+		} else if ( prefix ) {
+			// Looks like `keyword pattern` but names no keyword we know. Almost certainly a
+			// typo, and the failure is silent and destructive, so flag it for the caller.
+			// A genuine path can contain a space, hence a warning rather than an error.
+			suspect = true;
 		} else if ( rule.startsWith( '!' ) ) {
 			// Only a LEADING "!" negates; one inside a pattern is a literal character.
 			kind = 'include';
@@ -85,6 +95,7 @@ function parseRule( line ) {
 		pattern: rule,
 		isDir: rule.endsWith( '/' ),
 		specificity: getRuleSpecificity( rule ),
+		suspect,
 	};
 }
 
@@ -125,7 +136,12 @@ function reroot( rules, relativePath ) {
 
 		const pattern = '/' + relativePath.replace( /^\/+|\/+$/g, '' ) + rule.pattern;
 
-		return Object.assign( {}, rule, { pattern, specificity: getRuleSpecificity( pattern ) } );
+		// Specificity is deliberately NOT recomputed. Every anchored rule gains the same
+		// prefix, so rescoring would only change how anchored rules rank against
+		// unanchored ones -- and main.js builds the rsync filter from the un-rerooted
+		// rules while building the gitignore views from these. Rescoring desynchronises
+		// the two, so the manifest check stops agreeing with what rsync actually did.
+		return Object.assign( {}, rule, { pattern } );
 	} );
 }
 
