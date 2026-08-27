@@ -31,12 +31,9 @@
 	if ( ignoreListExtra !== 'false' ) {
 		ignoreList += "\n" + ignoreListExtra
 	}
-	// Remove any empty or commented lines
-	ignoreList = ignoreList.split('\n').filter(line => line.trim() !== '' && !line.trim().startsWith('#')).join('\n');
-	// Remove duplicate lines
-	ignoreList = ignoreList.split('\n').filter((line, index, self) => self.indexOf(line) === index).join('\n');
-
-	let ignoreListRepoRooted = ignoreList;
+	// Comments, blanks and duplicates are dropped by the parser.
+	const ignoreRules = rsyncRulesFormatter.parse( ignoreList );
+	let ignoreRulesRepoRooted = ignoreRules;
 
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
@@ -69,15 +66,7 @@
 		console.log( 'Using local root: ' + localRoot );
 		console.log( 'Using local repo root: ' + localRootRepo );
 		const relativePath = path.relative( localRootRepo, localRoot );
-		ignoreListRepoRooted = ignoreListRepoRooted.split( '\n' ).map( ( line ) => {
-			if ( line.startsWith( '/' ) ) {
-				return '/' + relativePath + line;
-			} else if ( line.startsWith( '!/' ) ) {
-				return '!/' + relativePath + line.substring( 2 );
-			} else {
-				return line;
-			}
-		} ).join( '\n' );
+		ignoreRulesRepoRooted = rsyncRulesFormatter.reroot( ignoreRules, relativePath );
 	}
 
 	// Make sure paths end with a slash.
@@ -135,8 +124,8 @@
 		rsync.set( extraOptions[ i ] );
 	}
 
-	if ( ignoreList ) {
-		const formattedRules = rsyncRulesFormatter.run( ignoreList );
+	if ( ignoreRules.length ) {
+		const formattedRules = rsyncRulesFormatter.format( ignoreRules );
 
 		console.log( 'Applied Ignore rules: ' );
 		console.log( formattedRules );
@@ -310,7 +299,8 @@
 				await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
 					env: {
 						PATH_DIR: localRootRepo,
-						IGNORE_LIST: ignoreListRepoRooted,
+						// Paths rsync never transfers, so they cannot be real drift.
+						IGNORE_LIST: rsyncRulesFormatter.toGitignore( ignoreRulesRepoRooted, 'not-sent' ),
 					},
 					listeners: {
 						stdline: ( data ) => {
@@ -458,7 +448,11 @@
 			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
 				env: {
 					PATH_DIR: localRootRepo,
-					SSH_IGNORE_LIST: ignoreListRepoRooted,
+					// Three views of the same rules, one per class of mismatch the
+					// manifest check has to forgive. See rsyncRulesFormatter.toGitignore.
+					SSH_IGNORE_LIST: rsyncRulesFormatter.toGitignore( ignoreRulesRepoRooted, 'not-sent' ),
+					SSH_NOT_DELETED_LIST: rsyncRulesFormatter.toGitignore( ignoreRulesRepoRooted, 'not-deleted' ),
+					SSH_HIDDEN_LIST: rsyncRulesFormatter.toGitignore( ignoreRulesRepoRooted, 'hidden' ),
 					GIT_MANIFEST: manifest,
 					RSYNC_MANIFEST: rsyncPlanFunctionalPath,
 					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,

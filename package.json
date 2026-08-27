@@ -3,6 +3,9 @@
 	"version": "1.0.0",
 	"description": "",
 	"main": "main.js",
+	"scripts": {
+		"test": "node tests/run.js && bash tests/manifest.sh"
+	},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",

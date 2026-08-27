@@ -52,7 +52,7 @@ You can push to SSH using rsync with the following basic example
     # Root of the locals files stated in the manifest
     env-local-root: ""
 
-    # Ignore rules. Each line will generate an extra --exclude=... parameter for rsync.
+    # Ignore rules, gitignore-flavoured. See "Ignore rules" below.
     force-ignore: ""
 
     # SSH Flags to pass to the RSync command
@@ -80,3 +80,72 @@ You can push to SSH using rsync with the following basic example
     action-pre-push: ''
       
 ```
+
+
+## Ignore rules
+
+`force-ignore` (and `force-ignore-extra`, appended to it) takes a gitignore-flavoured
+list. `SSH_IGNORE_LIST` / `SSH_IGNORE_LIST_EXTRA` are the repository variables that feed
+it through `action-bundle-push-to-ssh` and `consistency-check`.
+
+```
+/uploads/                 # excluded: we don't send it, and --delete won't remove it
+!/uploads/keep.txt        # re-included
+```
+
+An exclude is symmetric — it stops us sending a path *and* stops `--delete` removing it.
+That is often not what a deploy wants, so four rsync rule types are available as line
+prefixes:
+
+| Prefix | Short | What it does |
+|---|---|---|
+| `protect` | `P` | Keep sending ours, but never delete what is already on the target |
+| `risk`    | `R` | An exception to a `protect` |
+| `hide`    | `H` | Stop sending, and **do** let `--delete` remove what we pushed before |
+| `show`    | `S` | An exception to a `hide` |
+
+```
+protect /mu-plugins/          # overwrite our files, leave anything else alone
+hide /old-plugin/             # stop deploying it, and clean up what's already there
+```
+
+`hide` is how you retire a path. A plain exclude leaves whatever you last pushed sitting
+on the server forever; `hide` stops sending it while leaving it deletable.
+
+Prefix a line with `\` to treat it as a literal path (`\protect me.txt`).
+
+### Things worth knowing
+
+- **`protect` only speaks to deletion.** If an exclude also covers the path, nothing gets
+  sent there. In a whitelist-style list, pair it with an include:
+  `!/mu-plugins/` *and* `protect /mu-plugins/`.
+- **`--delete` only removes inside directories rsync is transferring.** If a directory
+  doesn't exist locally, rsync never descends into it, so `risk` cannot reach inside.
+- **You cannot `show` something inside a wholly hidden directory**, the same way git
+  cannot re-include a file under an excluded directory. Hide the contents with a glob
+  instead (`hide /legacy/*`).
+
+### Ordering
+
+Rules are sorted most-specific-first, not by the order you wrote them. This is
+deliberate: `!dir/` expands to a whole-subtree include (`+ dir/***`), which is much
+broader than git's `!dir/`, and specificity ordering is what keeps narrower rules ahead
+of it. Ties are broken by reverse authoring order, so the last line written wins, as in
+gitignore.
+
+Two consequences differ from `git check-ignore`, both verified against every ignore list
+in the fleet before being kept:
+
+- A negation written *before* the broad rule that would recover it still wins.
+- A mid-pattern slash (`config/secret.php`) is not anchored to the root, so it matches at
+  any depth.
+
+## Tests
+
+```sh
+npm test
+```
+
+`tests/run.js` drives **real rsync** — every case asserts what actually gets transferred
+and what survives `--delete`, not just the text of the filter file. `tests/manifest.sh`
+covers the git-manifest reconciliation. See `tests/cases.js` for the behaviours pinned.
