@@ -231,6 +231,36 @@
 		var rsyncDiffCommand = rsync.command();
 
 		async function getRsyncDiff() {
+			// Everything below the per-diff "Meaning" line is identical for both diffs, so
+			// it lives here once. The FORMAT block matters: consistency-diff.sh condenses
+			// its output heavily, and a reader who assumes plain `git diff` will misread it.
+			var headerCommon =
+				'# NOTE     : git CONTENT diff vs the build commit — NOT rsync\'s\n' +
+				'#            transfer decision. rsync uses size-only/ignore-times, so\n' +
+				'#            the files it actually sends can differ. For rsync\'s real\n' +
+				"#            file list see the 'deploy-rsync-plan' artifact.\n" +
+				'#\n' +
+				'# FORMAT   : condensed for reading, NOT a patch — do not `git apply` it.\n' +
+				'#\n' +
+				'#   No context lines (-U0). Only changed lines are printed, so a\n' +
+				'#   hunk shows what differs and nothing else.\n' +
+				'#\n' +
+				'#   A very long line is cut short and annotated with its real size:\n' +
+				'#       -<start of the line>... [target line, 39.1 KB, truncated]\n' +
+				'#   Minified css/js is one line of tens of KB; printed whole it\n' +
+				'#   buries every other change in the file.\n' +
+				'#\n' +
+				'#   A file with no body worth printing is one line instead:\n' +
+				'#       diff --git --simple <status> <path>\n' +
+				"#     A  = exists in the BUILD only    (deploy would create it)\n" +
+				"#     D  = exists on the TARGET only   (drift, or a removed file)\n" +
+				"#     R  = renamed between the two sides\n" +
+				"#     WS = whitespace-only difference (line endings or indentation);\n" +
+				'#          content is identical. Usually a file edited on the server\n' +
+				'#          over FTP/SFTP, which rewrote its line endings. Still real\n' +
+				'#          drift — the byte contents differ — but nothing to read.\n' +
+				'##################################################################\n\n';
+
 			var headerCurrent =
 				'##################################################################\n' +
 				'# CONSISTENCY DIFF — current build vs deploy target\n' +
@@ -240,11 +270,7 @@
 				"#            '-' = on the TARGET now (differs from build)\n" +
 				'# Meaning  : everything below is what deploying THIS build would\n' +
 				'#            change on the target. Empty = target already matches.\n' +
-				'# NOTE     : git CONTENT diff vs the build commit — NOT rsync\'s\n' +
-				'#            transfer decision. rsync uses size-only/ignore-times, so\n' +
-				'#            the files it actually sends can differ. For rsync\'s real\n' +
-				"#            file list see the 'deploy-rsync-plan' artifact.\n" +
-				'##################################################################\n\n';
+				headerCommon;
 
 			var headerDeployed =
 				'##################################################################\n' +
@@ -256,11 +282,7 @@
 				'# Meaning  : how the target has drifted from the last deployed build.\n' +
 				'#            Empty  = target is exactly one deploy behind (clean).\n' +
 				'#            Output = unexpected manual drift on the server.\n' +
-				'# NOTE     : git CONTENT diff vs the build commit — NOT rsync\'s\n' +
-				'#            transfer decision. rsync uses size-only/ignore-times, so\n' +
-				'#            the files it actually sends can differ. For rsync\'s real\n' +
-				"#            file list see the 'deploy-rsync-plan' artifact.\n" +
-				'##################################################################\n\n';
+				headerCommon;
 
 			var diffsToDo = [
 				{ ref: 'HEAD', name: 'diff_current-build-vs-target', header: headerCurrent },
@@ -317,7 +339,13 @@
 				'That plan is rsync\'s ACTUAL transfer decision (size-only/ignore-times);\n' +
 				'these .diff files may not match it exactly.\n' +
 				'\n' +
-				'Each diff file has a header explaining exactly what it compares.\n';
+				'\n' +
+				'The diffs are condensed, not patches. They carry no context lines, a very\n' +
+				'long line (minified css/js) is cut short and annotated with its real size,\n' +
+				'and a file with no body worth printing is reduced to a single\n' +
+				"'diff --git --simple <status> <path>' line — including WS, a file that\n" +
+				'differs only in line endings or indentation. Each diff file has a header\n' +
+				'explaining exactly what it compares and how to read the condensed form.\n';
 			fs.writeFileSync( path.join( diff_path, 'README.txt' ), readme );
 
 			return diff_path;
