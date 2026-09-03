@@ -1,8 +1,13 @@
-# Ignore all git files on deployment
-.git
-.gitignore
-.gitattributes
-.github
+# Ignore all git files on deployment.
+# Anchored to the deploy root on purpose: unanchored these also match a
+# vendored .gitignore/.github deep inside a plugin, and rsync protects an
+# excluded file from --delete, so a directory the build dropped can never be
+# cleared from the target. The built repo cannot contain a nested .git, so
+# anchoring loses nothing.
+/.git
+/.gitignore
+/.gitattributes
+/.github
 /README.md
 
 # Silence is golden files
