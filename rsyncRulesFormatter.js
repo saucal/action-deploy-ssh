@@ -116,7 +116,16 @@ function parse( input ) {
 		}
 
 		seen.add( trimmed );
-		rules.push( parseRule( trimmed ) );
+
+		const rule = parseRule( trimmed );
+
+		// A lone "!" (or a prefix with nothing after it) leaves no pattern. Emitting it
+		// would give rsync a bare "+ ", which it rejects and aborts the whole deploy on.
+		if ( rule.pattern === '' ) {
+			return;
+		}
+
+		rules.push( rule );
 	} );
 
 	return rules;

@@ -395,6 +395,17 @@ module.exports = [
 
 	// ------------------------------------------------------------- hygiene
 	{
+		// A lone "!" used to emit "+ " with no pattern, which rsync rejects outright
+		// ("unexpected end of filter rule"), killing the whole deploy.
+		name: 'a rule with nothing left after its prefix is skipped, not fatal',
+		rules: `
+			!
+			!   
+			/uploads/
+		`,
+		send: { '/uploads/a.jpg': 'IGNORED', '/keep.php': 'SENT' },
+	},
+	{
 		name: 'comments, blank lines and duplicates are stripped',
 		rules: `
 			# a comment
