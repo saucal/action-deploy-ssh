@@ -9,17 +9,22 @@
 #   SSH_NOT_DELETED_LIST  rsync will not remove these   -> drop git's deletions
 #   SSH_HIDDEN_LIST       rsync removes these unasked   -> drop rsync's deletions
 #
-PATH_DIR="${GITHUB_WORKSPACE}/${PATH_DIR}"
+# Both lists are relative to the deploy root: main.js scopes the git manifest to it when
+# the deploy root is a subdirectory, and rsync's plan is already relative to it.
 manifest_file="${GIT_MANIFEST}"
 rsync_file="${RSYNC_MANIFEST}"
 
 echo "--------------------------------------------------"
 
-cd "${PATH_DIR}" || exit 1;
+# check-ignore needs a repository to run in, and nothing else: with --no-index it only
+# matches patterns. An empty throwaway repo keeps the answer to exactly our rules, relative
+# to the deploy root. Running inside the built checkout would also apply that repo's own
+# .gitignore, and would anchor the rules to the repo root rather than the deploy root.
+match_repo="$(mktemp -d)"
+git init -q "$match_repo"
+trap 'rm -rf "$match_repo"' EXIT
 
 # Echo the stdin lines that are NOT matched by the given gitignore rules.
-# core.excludesFile is used rather than writing a .gitignore, so the repo under test is
-# never mutated -- the previous mv/restore dance corrupted the checkout if it died early.
 keep_unignored() {
 	local rules="$1"
 
@@ -40,7 +45,7 @@ keep_unignored() {
 
 	# One check-ignore for the whole list; the per-line loop this replaces spawned a git
 	# process per manifest entry.
-	ignored="$( printf '%s\n' "$input" | git -c core.excludesFile="$rules_file" \
+	ignored="$( printf '%s\n' "$input" | git -C "$match_repo" -c core.excludesFile="$rules_file" \
 		check-ignore --stdin --no-index 2>/dev/null )"
 	rm -f "$rules_file"
 

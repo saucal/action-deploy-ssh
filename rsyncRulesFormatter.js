@@ -69,8 +69,10 @@ function parseRule( line ) {
 	let suspect = false;
 
 	if ( rule.startsWith( '\\' ) ) {
-		// Escaped: everything after the backslash is a literal path.
-		rule = rule.slice( 1 );
+		// Escaped: everything after the backslash is a literal path. A backslash in front of
+		// a glob character stays, because that is how rsync and git spell a literal `*`,
+		// `?` or `[`; stripping it would turn `\\*.log` into a real `*.log`.
+		rule = /^\\[*?[]/.test( rule ) ? rule : rule.slice( 1 );
 	} else {
 		const prefix = rule.match( /^([A-Za-z]+)[ \t]+(\S.*)$/ );
 		const keyword = prefix && PREFIXES[ prefix[ 1 ].toLowerCase() ];
@@ -131,27 +133,32 @@ function parse( input ) {
 	return rules;
 }
 
-// Re-root every anchored pattern under `relativePath`, for when the deploy root is a
-// subdirectory of the repo. Unanchored patterns match at any depth already.
-function reroot( rules, relativePath ) {
-	if ( ! relativePath ) {
-		return rules;
+// Scope a repo-rooted git manifest ("+ path" / "- path" lines, as build-to-git writes it)
+// to a deploy root that is a subdirectory of the repo: drop every path outside it, strip
+// the prefix from the rest. rsync only ever sees the deploy root, so this puts the
+// manifest in the same coordinates as rsync's plan and lets both sides use the ignore
+// rules exactly as written. Converting paths is plain string handling; rewriting the
+// rules instead (the old reroot) had to preserve anchoring and ordering semantics, and
+// got them wrong twice.
+function scopeManifest( text, prefix ) {
+	const root = String( prefix || '' ).replace( /^\/+|\/+$/g, '' );
+	if ( ! root ) {
+		return String( text );
 	}
 
-	return rules.map( ( rule ) => {
-		if ( ! rule.pattern.startsWith( '/' ) ) {
-			return rule;
+	const inside = root + '/';
+	return String( text ).split( '\n' ).reduce( ( out, line ) => {
+		const m = line.match( /^([+-] )(")?(.*)$/ );
+		if ( ! m ) {
+			return out;
 		}
-
-		const pattern = '/' + relativePath.replace( /^\/+|\/+$/g, '' ) + rule.pattern;
-
-		// Specificity is deliberately NOT recomputed. Every anchored rule gains the same
-		// prefix, so rescoring would only change how anchored rules rank against
-		// unanchored ones -- and main.js builds the rsync filter from the un-rerooted
-		// rules while building the gitignore views from these. Rescoring desynchronises
-		// the two, so the manifest check stops agreeing with what rsync actually did.
-		return Object.assign( {}, rule, { pattern } );
-	} );
+		// diff-tree quotes unusual names; the path, prefix included, sits inside the quotes.
+		const [ , mark, quote = '', rest ] = m;
+		if ( rest.startsWith( inside ) ) {
+			out.push( mark + quote + rest.slice( inside.length ) );
+		}
+		return out;
+	}, [] ).join( '\n' ) + ( String( text ).endsWith( '\n' ) ? '\n' : '' );
 }
 
 function sortRules( rules ) {
@@ -220,11 +227,14 @@ function toGitignore( rules, side ) {
 		}
 
 		const mark = negated ? '!' : '';
-		lines.push( mark + rule.pattern );
+		// A pattern that starts with # or ! is a literal name here (it came from an escaped
+		// rule); unescaped, git would read it as a comment or a negation.
+		const pattern = /^[#!]/.test( rule.pattern ) ? '\\' + rule.pattern : rule.pattern;
+		lines.push( mark + pattern );
 
 		// Mirror the subtree expansion so a re-included directory brings its contents.
 		if ( rule.isDir && negated && KINDS[ rule.kind ].subtree ) {
-			lines.push( mark + rule.pattern + '**' );
+			lines.push( mark + pattern + '**' );
 		}
 
 		return lines;
@@ -239,6 +249,6 @@ module.exports = {
 	run,
 	parse,
 	format,
-	reroot,
+	scopeManifest,
 	toGitignore,
 };
