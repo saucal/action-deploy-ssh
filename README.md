@@ -143,9 +143,57 @@ in the fleet before being kept:
 ## Tests
 
 ```sh
-npm test
+npm test                      # everything
+node tests/run.js anchor      # only cases matching "anchor"
+node tests/run.js --bugs      # the defects this suite pins
+node tests/run.js --notes     # behaviour that is correct but surprising
+node tests/run.js --list      # case names and per-file counts
 ```
 
-`tests/run.js` drives **real rsync** — every case asserts what actually gets transferred
-and what survives `--delete`, not just the text of the filter file. `tests/manifest.sh`
-covers the git-manifest reconciliation. See `tests/cases.js` for the behaviours pinned.
+The case suite **characterises** the deploy: it pins what the action does *today*, not
+what it ought to do. Everything runs against real rsync and real `git check-ignore` --
+nothing is mocked.
+
+Two consequences worth understanding before changing anything:
+
+- A case marked `bug:` still asserts the CURRENT, wrong result. The suite stays green
+  until someone deliberately changes the behaviour, at which point that case fails and
+  the change has to be declared. `--bugs` is the ledger of what is known-broken.
+- A case marked `note:` pins behaviour that is correct but surprising -- by design,
+  configurable, or matching `git` exactly. These are the ones that look like bugs in a
+  bug report and are not.
+
+Case files are `tests/cases-*.js`, picked up automatically:
+
+| File | Area |
+|---|---|
+| `cases-patterns.js` | gitignore-flavoured pattern translation: anchoring, globs, negation, ordering, hygiene |
+| `cases-deploy.js` | what the real rsync invocation does to a target filesystem |
+| `cases-manifest.js` | `check-against-manifest.sh` reconciliation, and the repo-rooted subdirectory path |
+| `cases-fleet.js` | common real-world rule shapes and the default list, plus hostile input |
+| `cases-rules.js` | the `protect` / `hide` / `show` / `risk` prefixes |
+| `cases-api.js` | the formatter API used by main.js (`reroot`, `toGitignore`) |
+
+`tests/harness.js` runs rsync with the production flags taken from `main.js`
+(`-avrcz` plus `--delete --no-inc-recursive --size-only --ignore-times --omit-dir-times
+--no-owner --no-group --no-dirs --no-perms`), so the tests measure the real deploy rather
+than a convenient approximation.
+
+Writing a case: prefer the declarative fields (`rules`, `local`, `send`, `remote`,
+`filter`, `manifest`, `rsyncExit`). Reach for `check:` only for scenarios they cannot express --
+symlinks, mode bits, a file where the target has a directory. A case asserting on
+`remote:` must supply `local:`, because `--delete` against an empty source wipes the
+target and would make every `DELETED` assertion pass for free.
+
+Other suites, all run by `npm test`:
+
+| File | What it covers |
+|---|---|
+| `tests/e2e-main.js` | the real `main.js` end to end, against a local target through a fake ssh |
+| `tests/manifest.sh` | `check-against-manifest.sh` reconciling each class of mismatch |
+| `tests/default-ignore.test.sh` | the shipped `default-ignore.txt` |
+| `test-consistency-diff.sh` | `consistency-diff.sh` |
+
+`tests/fleet-audit.js` is not part of `npm test`: it replays every real ignore list from a
+fleet scan (`gh-actions-management/scan-results.json`) and fails if any site would deploy
+differently. Run it before and after changing the formatter.

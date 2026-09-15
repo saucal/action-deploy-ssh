@@ -13,7 +13,7 @@
 module.exports = [
 	// ---------------------------------------------------------------- baseline
 	{
-		name: 'vendor whitelist (the action-bundle-push-to-ssh default)',
+		name: 'rules: vendor whitelist (the action-bundle-push-to-ssh default)',
 		rules: `
 			/auth.json
 			/vendor/*
@@ -32,7 +32,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'unanchored patterns match at any depth (same as git)',
+		name: 'rules: unanchored patterns match at any depth (same as git)',
 		rules: `
 			node_modules/
 			*.log
@@ -45,7 +45,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'cannot re-include under a fully excluded directory (same as git)',
+		name: 'rules: cannot re-include under a fully excluded directory (same as git)',
 		rules: `
 			/vendor/
 			!/vendor/composer/installed.json
@@ -58,7 +58,7 @@ module.exports = [
 
 	// ---------------------------------------------- the *** subtree expansion
 	{
-		name: '"!dir/" re-includes the whole subtree (broader than git, on purpose)',
+		name: 'rules: "!dir/" re-includes the whole subtree (broader than git, on purpose)',
 		rules: `
 			/wp-content/*
 			!/wp-content/plugins/
@@ -70,7 +70,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'whitelist style: catch-all excludes, then carve back in',
+		name: 'rules: whitelist style: catch-all excludes, then carve back in',
 		rules: `
 			/*
 			/wp-content/*
@@ -90,7 +90,7 @@ module.exports = [
 		},
 	},
 	{
-		name: '"!dir/" written AFTER the narrow excludes it would otherwise swallow',
+		name: 'rules: "!dir/" written AFTER the narrow excludes it would otherwise swallow',
 		rules: `
 			/mu-plugins/helper.php
 			/mu-plugins/cache-mgmt/
@@ -107,7 +107,7 @@ module.exports = [
 
 	// ------------------------------------------------------- ordering edge cases
 	{
-		name: 'specificity beats authoring order for a negation written first',
+		name: 'rules: specificity beats authoring order for a negation written first',
 		gitDiffers: 'git is last-match-wins, so git would ignore /config/local.php',
 		rules: `
 			!/config/local.php
@@ -119,7 +119,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'equal specificity keeps authoring order (last wins, like git)',
+		name: 'rules: equal specificity keeps authoring order (last wins, like git)',
 		rules: `
 			!/a/b
 			/a/b
@@ -127,7 +127,7 @@ module.exports = [
 		send: { '/a/b': 'IGNORED' },
 	},
 	{
-		name: 'equal specificity keeps authoring order (reversed)',
+		name: 'rules: equal specificity keeps authoring order (reversed)',
 		rules: `
 			/a/b
 			!/a/b
@@ -135,7 +135,7 @@ module.exports = [
 		send: { '/a/b': 'SENT' },
 	},
 	{
-		name: 'a mid-pattern slash is NOT anchored to the root',
+		name: 'rules: a mid-pattern slash is NOT anchored to the root',
 		gitDiffers: 'git anchors config/secret.php to the root; rsync matches it at any depth',
 		rules: `config/secret.php`,
 		send: {
@@ -144,7 +144,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'a "!" inside a pattern is literal, not a negation',
+		name: 'rules: a "!" inside a pattern is literal, not a negation',
 		rules: `
 			/weird!name.php
 		`,
@@ -153,7 +153,7 @@ module.exports = [
 
 	// ------------------------------------------------------- protect (new)
 	{
-		name: 'protect: overwrite our files, never delete theirs',
+		name: 'rules: protect: overwrite our files, never delete theirs',
 		rules: `
 			protect /mu-plugins/
 		`,
@@ -167,7 +167,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'risk: carve an exception out of a protect',
+		name: 'rules: risk: carve an exception out of a protect',
 		rules: `
 			protect /mu-plugins/
 			risk /mu-plugins/tmp/
@@ -181,7 +181,7 @@ module.exports = [
 
 	// ---------------------------------------------------------- hide (new)
 	{
-		name: 'hide: stop sending, and let --delete clean up what we already pushed',
+		name: 'rules: hide: stop sending, and let --delete clean up what we already pushed',
 		rules: `
 			hide /old-plugin/
 		`,
@@ -190,7 +190,7 @@ module.exports = [
 		remote: { '/old-plugin/leftover.php': 'DELETED' },
 	},
 	{
-		name: 'exclude protects the remote copy; hide does not (the whole point)',
+		name: 'rules: exclude protects the remote copy; hide does not (the whole point)',
 		rules: `
 			/excluded/
 			hide /hidden/
@@ -206,7 +206,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'show: carve an exception out of a hide',
+		name: 'rules: show: carve an exception out of a hide',
 		rules: `
 			hide /legacy/*
 			show /legacy/keep.php
@@ -218,7 +218,7 @@ module.exports = [
 		remote: { '/legacy/stale.php': 'DELETED' },
 	},
 	{
-		name: 'show cannot reach inside a wholly hidden directory (same rule as git)',
+		name: 'rules: show cannot reach inside a wholly hidden directory (same rule as git)',
 		rules: `
 			hide /legacy/
 			show /legacy/keep.php
@@ -226,7 +226,7 @@ module.exports = [
 		send: { '/legacy/keep.php': 'IGNORED' },
 	},
 	{
-		name: 'hide: an extraneous directory is removed whole, contents included',
+		name: 'rules: hide: an extraneous directory is removed whole, contents included',
 		rules: `hide /gone/`,
 		local: [ '/keep.php' ],
 		// Nothing local under /gone, so rsync never descends and never deletes inside it.
@@ -236,7 +236,7 @@ module.exports = [
 
 	// ------------------------------------- new rule types inside a real-shaped list
 	{
-		name: 'protect/hide slot into a whitelist-style list at the right specificity',
+		name: 'rules: protect/hide slot into a whitelist-style list at the right specificity',
 		rules: `
 			/*
 			/wp-content/*
@@ -257,7 +257,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'long-form and short-form prefixes are equivalent',
+		name: 'rules: long-form and short-form prefixes are equivalent',
 		rules: `
 			P /a/
 			H /b/*
@@ -279,7 +279,7 @@ module.exports = [
 	{
 		// If `show` emitted "+" instead of "S", keep.php would lose the exclude's
 		// delete-protection on the receiver and be removed. S is sender-side only.
-		name: 'show is sender-side only, unlike an include',
+		name: 'rules: show is sender-side only, unlike an include',
 		rules: `
 			/legacy/*
 			show /legacy/keep.php
@@ -291,7 +291,7 @@ module.exports = [
 	{
 		// The hide must reach the CONTENTS for the subtree expansion to matter: "*" does
 		// not cross "/", so `hide /legacy/*` would leave keep/a.php unmatched either way.
-		name: 'show on a directory brings its contents',
+		name: 'rules: show on a directory brings its contents',
 		rules: `
 			hide /legacy/**
 			show /legacy/keep/
@@ -306,7 +306,7 @@ module.exports = [
 		// 31 rules across the fleet have a wildcard in a directory segment
 		// (/saucal_migration_*/, /plugins/*/node_modules/). The subtree expansion has to
 		// survive the wildcard.
-		name: 'a wildcard directory segment still excludes the whole subtree',
+		name: 'rules: a wildcard directory segment still excludes the whole subtree',
 		rules: `
 			/saucal_migration_*/
 			/plugins/*/node_modules/
@@ -318,7 +318,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'protect and hide work on a wildcard directory segment',
+		name: 'rules: protect and hide work on a wildcard directory segment',
 		rules: `
 			protect /plugins/*/uploads/
 			hide /plugins/*/cache/
@@ -330,7 +330,7 @@ module.exports = [
 		},
 	},
 	{
-		name: 'a wildcard mid-path is anchored like the rest of the pattern',
+		name: 'rules: a wildcard mid-path is anchored like the rest of the pattern',
 		rules: `
 			/plugins/acme/vendor/*/tests/
 		`,
@@ -345,7 +345,7 @@ module.exports = [
 		// Written protect-FIRST. Reverse-authoring order alone would put the include
 		// first, and an include tells the delete pass the path is fair game -- so this
 		// only passes because of the kind precedence in sortRules.
-		name: 'protect still wins when written BEFORE the include it is paired with',
+		name: 'rules: protect still wins when written BEFORE the include it is paired with',
 		rules: `
 			/*
 			protect /mu-plugins/
@@ -358,7 +358,7 @@ module.exports = [
 		// The delete pass ignores H rules entirely, so an exclude on the same path still
 		// protects it. Adding `hide` next to an existing exclude does NOT start cleaning
 		// up -- the exclude has to go. Easy to get wrong, so pin it.
-		name: 'an exclude on the same path still protects it, even alongside a hide',
+		name: 'rules: an exclude on the same path still protects it, even alongside a hide',
 		rules: `
 			/uploads/
 			hide /uploads/
@@ -367,7 +367,7 @@ module.exports = [
 		remote: { '/uploads/stale.jpg': 'KEPT' },
 	},
 	{
-		name: 'hide alone (no competing exclude) does clean up',
+		name: 'rules: hide alone (no competing exclude) does clean up',
 		rules: `
 			hide /uploads/
 		`,
@@ -375,7 +375,7 @@ module.exports = [
 		remote: { '/uploads/stale.jpg': 'DELETED' },
 	},
 	{
-		name: 'a mistyped prefix is treated as a literal path, not silently as protect',
+		name: 'rules: a mistyped prefix is treated as a literal path, not silently as protect',
 		rules: `
 			Protect /mu-plugins/
 		`,
@@ -385,7 +385,7 @@ module.exports = [
 	},
 	{
 		// Distinguishes the asterisks-only score (5) from asterisks-plus-chars (10).
-		name: 'a glob with characters is more specific than a bare glob',
+		name: 'rules: a glob with characters is more specific than a bare glob',
 		rules: `
 			/a/*
 			!/a/*.php
@@ -397,7 +397,7 @@ module.exports = [
 	{
 		// A lone "!" used to emit "+ " with no pattern, which rsync rejects outright
 		// ("unexpected end of filter rule"), killing the whole deploy.
-		name: 'a rule with nothing left after its prefix is skipped, not fatal',
+		name: 'rules: a rule with nothing left after its prefix is skipped, not fatal',
 		rules: `
 			!
 			!   
@@ -406,7 +406,7 @@ module.exports = [
 		send: { '/uploads/a.jpg': 'IGNORED', '/keep.php': 'SENT' },
 	},
 	{
-		name: 'comments, blank lines and duplicates are stripped',
+		name: 'rules: comments, blank lines and duplicates are stripped',
 		rules: `
 			# a comment
 			/a.php
@@ -417,7 +417,7 @@ module.exports = [
 		send: { '/a.php': 'IGNORED', '/b.php': 'IGNORED', '/c.php': 'SENT' },
 	},
 	{
-		name: 'CRLF line endings survive (GitHub variables often carry them)',
+		name: 'rules: CRLF line endings survive (GitHub variables often carry them)',
 		rules: "/a.php\r\n/b.php\r\n",
 		send: { '/a.php': 'IGNORED', '/b.php': 'IGNORED' },
 	},

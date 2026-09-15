@@ -4,7 +4,7 @@
 	"description": "",
 	"main": "main.js",
 	"scripts": {
-		"test": "node tests/run.js && bash tests/manifest.sh"
+		"test": "node tests/run.js && node tests/e2e-main.js && bash tests/manifest.sh && bash tests/default-ignore.test.sh && bash test-consistency-diff.sh"
 	},
 	"keywords": [],
 	"author": "",

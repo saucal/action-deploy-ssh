@@ -1,217 +1,213 @@
 #!/usr/bin/env node
-// Runs every fixture in cases.js through REAL rsync, so the assertions are about what
-// actually gets deployed rather than about the text of the filter file.
+// Runs every characterisation case against REAL rsync.
 //
-//   node tests/run.js            all cases
-//   node tests/run.js protect    only cases whose name matches "protect"
+//   node tests/run.js               everything
+//   node tests/run.js anchor        only cases whose name matches "anchor"
+//   node tests/run.js --list        list case names and counts per file
+//   node tests/run.js --bugs        list only the cases pinning known-wrong behaviour
 //
-// Sender side  (`send`)   : build a source tree, dry-run, see which paths transfer.
-// Receiver side (`remote`): build source + a pre-populated target, run for real with
-//                           --delete, see which pre-existing files survive.
+// Case files are tests/cases-*.js, each exporting an array of:
+//
+//   {
+//     name:   'what this pins',
+//     rules:  '<ignore list, gitignore-flavoured>',
+//     local:  [ '/paths/in/the/build' ],          // optional extra source files
+//     send:   { '/p': 'SENT' | 'IGNORED' },       // what the deploy would transfer
+//     remote: { '/p': 'KEPT' | 'DELETED' | 'OVERWRITTEN' },  // what survives --delete
+//     filter: '<exact rsync filter file>',        // optional, pins the translation
+//     manifest: { ignore, git, rsync, expect: 'MATCH' | 'MISMATCH' },  // optional
+//     rsyncExit: 1,                                // expected rsync exit code (default 0)
+//     check:  function () { ... },                // for scenarios the fields cannot express;
+//                                                 // throw to fail, return to pass
+//     bug:    'why this result is a DEFECT',      // pins current behaviour anyway
+//     note:   'why this is correct but surprising', // by design, configurable, or matches git
+//   }
 
 const fs = require( 'fs' );
-const os = require( 'os' );
 const path = require( 'path' );
-const { execFileSync } = require( 'child_process' );
-const formatter = require( '../rsyncRulesFormatter' );
-const cases = require( './cases' );
+const h = require( './harness' );
 
-const filter = process.argv[ 2 ];
+const args = process.argv.slice( 2 );
+const listOnly = args.includes( '--list' );
+const bugsOnly = args.includes( '--bugs' );
+const filter = args.filter( ( a ) => ! a.startsWith( '--' ) )[ 0 ];
+
+const files = fs.readdirSync( __dirname )
+	.filter( ( f ) => /^cases-.*\.js$/.test( f ) ).sort();
+
+if ( ! files.length ) {
+	console.error( 'no tests/cases-*.js files found' );
+	process.exit( 2 );
+}
+
 let pass = 0;
+let skipped = 0;
 const failures = [];
+const bugs = [];
+const notes = [];
+const perFile = {};
 
-function tmpdir() {
-	return fs.mkdtempSync( path.join( os.tmpdir(), 'rsync-rules-' ) );
-}
+for ( const file of files ) {
+	const cases = require( path.join( __dirname, file ) );
+	perFile[ file ] = cases.length;
 
-function writeFile( root, rel, body ) {
-	const full = path.join( root, rel );
-	fs.mkdirSync( path.dirname( full ), { recursive: true } );
-	fs.writeFileSync( full, body );
-}
+	for ( const c of cases ) {
+		if ( filter && ! c.name.toLowerCase().includes( filter.toLowerCase() ) ) {
+			skipped++;
+			continue;
+		}
+		if ( args.includes( '--notes' ) && ! c.note && ! c.bug ) {
+			skipped++;
+			continue;
+		}
+		if ( bugsOnly && ! c.bug ) {
+			skipped++;
+			continue;
+		}
+		if ( c.bug ) {
+			bugs.push( { file, name: c.name, why: c.bug } );
+		}
+		if ( c.note ) {
+			notes.push( { file, name: c.name, why: c.note } );
+		}
+		if ( listOnly ) {
+			console.log( ( c.bug ? '  BUG  ' : '       ' ) + c.name );
+			continue;
+		}
 
-function rsync( args ) {
-	return execFileSync( 'rsync', args, { encoding: 'utf8' } );
-}
+		const errors = [];
 
-// Which of `paths` does rsync actually transfer?
-function sent( rules, paths ) {
-	const dir = tmpdir();
-	const src = path.join( dir, 'src' );
-	fs.mkdirSync( src );
-	paths.forEach( ( p ) => writeFile( src, p, 'x' ) );
-	fs.writeFileSync( path.join( dir, 'rules' ), rules );
-
-	const out = rsync( [
-		'-rn', '--out-format=%n',
-		'--filter=merge ' + path.join( dir, 'rules' ),
-		src + '/', path.join( dir, 'dst' ) + '/',
-	] );
-
-	const transferred = new Set(
-		out.split( '\n' ).filter( ( l ) => l && ! l.endsWith( '/' ) ).map( ( l ) => '/' + l )
-	);
-	fs.rmSync( dir, { recursive: true, force: true } );
-	return transferred;
-}
-
-// Which pre-existing remote files survive a real --delete run?
-function survivors( rules, localPaths, remotePaths ) {
-	const dir = tmpdir();
-	const src = path.join( dir, 'src' );
-	const dst = path.join( dir, 'dst' );
-	fs.mkdirSync( src );
-	fs.mkdirSync( dst );
-	localPaths.forEach( ( p ) => writeFile( src, p, 'from-repo' ) );
-	remotePaths.forEach( ( p ) => writeFile( dst, p, 'on-server' ) );
-	fs.writeFileSync( path.join( dir, 'rules' ), rules );
-
-	// Mirrors the real deploy, which runs `avrcz` -- the -c matters: without it rsync's
-	// size+mtime quick check skips same-size files and an overwrite silently no-ops.
-	rsync( [
-		'-a', '-c', '--delete',
-		'--filter=merge ' + path.join( dir, 'rules' ),
-		src + '/', dst + '/',
-	] );
-
-	const alive = new Set();
-	const content = new Map();
-	( function walk( d ) {
-		for ( const e of fs.readdirSync( d, { withFileTypes: true } ) ) {
-			const full = path.join( d, e.name );
-			if ( e.isDirectory() ) walk( full );
-			else {
-				const rel = '/' + path.relative( dst, full );
-				alive.add( rel );
-				content.set( rel, fs.readFileSync( full, 'utf8' ).trim() );
+		try {
+			// An imperative scenario -- symlinks, mode bits, file/directory collisions --
+			// that the declarative fields cannot describe.
+			if ( typeof c.check === 'function' ) {
+				c.check();
 			}
-		}
-	} )( dst );
-	fs.rmSync( dir, { recursive: true, force: true } );
-	return { alive, content };
-}
 
-for ( const c of cases ) {
-	if ( filter && ! c.name.toLowerCase().includes( filter.toLowerCase() ) ) continue;
-
-	const errors = [];
-	let rules;
-	try {
-		rules = formatter.run( c.rules );
-	} catch ( e ) {
-		failures.push( { name: c.name, errors: [ 'threw: ' + e.message ] } );
-		continue;
-	}
-
-	if ( c.send ) {
-		const paths = Object.keys( c.send );
-		const transferred = sent( rules, paths );
-		for ( const [ p, want ] of Object.entries( c.send ) ) {
-			const got = transferred.has( p ) ? 'SENT' : 'IGNORED';
-			if ( got !== want ) errors.push( `send  ${ p }: want ${ want }, got ${ got }` );
-		}
-	}
-
-	if ( c.remote ) {
-		// Whatever the case says exists in the build dir. Without this the source tree is
-		// empty, rsync --delete wipes the target wholesale, and every DELETED assertion
-		// passes no matter what the filter says -- a vacuous test that looks green.
-		const local = ( c.local || [] ).concat(
-			Object.entries( c.send || {} ).filter( ( [ , v ] ) => v === 'SENT' ).map( ( [ k ] ) => k )
-		);
-
-		if ( ! local.length ) {
-			errors.push(
-				'this case asserts on `remote` but nothing exists locally, so rsync --delete ' +
-				'would empty the target and the assertion would hold for any filter. ' +
-				'Add `local: [ ... ]` or a `send` entry marked SENT.'
-			);
-		} else {
-			const { alive, content } = survivors( rules, local, Object.keys( c.remote ) );
-			for ( const [ p, want ] of Object.entries( c.remote ) ) {
-				let got = alive.has( p ) ? 'KEPT' : 'DELETED';
-				// OVERWRITTEN distinguishes "we replaced their copy" from "we left it alone",
-				// which KEPT on its own cannot.
-				if ( got === 'KEPT' && want === 'OVERWRITTEN' ) {
-					got = content.get( p ) === 'from-repo' ? 'OVERWRITTEN' : 'KEPT';
+			if ( c.filter !== undefined ) {
+				const got = h.filterFor( c.rules );
+				if ( got !== c.filter ) {
+					errors.push( 'filter:\n        want: ' + JSON.stringify( c.filter ) +
+						'\n        got:  ' + JSON.stringify( got ) );
 				}
-				if ( got !== want ) errors.push( `remote ${ p }: want ${ want }, got ${ got }` );
 			}
+
+			if ( c.send ) {
+				const paths = Object.keys( c.send ).concat( c.local || [] );
+				let transferred = new Set();
+				try {
+					transferred = h.sent( c.rules, paths );
+					if ( c.rsyncExit ) {
+						errors.push( 'send   expected rsync to exit ' + c.rsyncExit + ', it exited 0' );
+					}
+				} catch ( e ) {
+					if ( e.rsyncExit === undefined || e.rsyncExit !== c.rsyncExit ) {
+						throw e;
+					}
+				}
+				for ( const [ p, want ] of Object.entries( c.send ) ) {
+					const got = transferred.has( p ) ? 'SENT' : 'IGNORED';
+					if ( got !== want ) {
+						errors.push( 'send   ' + p + ': want ' + want + ', got ' + got );
+					}
+				}
+			}
+
+			if ( c.remote ) {
+				const local = ( c.local || [] ).concat(
+					Object.entries( c.send || {} )
+						.filter( ( e ) => e[ 1 ] === 'SENT' ).map( ( e ) => e[ 0 ] )
+				);
+				if ( ! local.length ) {
+					// An empty source makes --delete wipe the target, so every DELETED
+					// assertion would hold for any filter at all.
+					errors.push( 'asserts on `remote` with an empty build dir; add `local: [...]`' );
+				} else {
+					const res = h.deploy( c.rules, local, Object.keys( c.remote ) );
+					const exit = res.code === 24 ? 0 : res.code;
+					if ( exit !== ( c.rsyncExit || 0 ) ) {
+						errors.push( 'remote rsync exited ' + res.code + ', expected ' + ( c.rsyncExit || 0 ) );
+					}
+					for ( const [ p, want ] of Object.entries( c.remote ) ) {
+						let got = res.alive.has( p ) ? 'KEPT' : 'DELETED';
+						if ( got === 'KEPT' && want === 'OVERWRITTEN' ) {
+							got = res.content[ p ] === 'from-repo' ? 'OVERWRITTEN' : 'KEPT';
+						}
+						if ( got !== want ) {
+							errors.push( 'remote ' + p + ': want ' + want + ', got ' + got );
+						}
+					}
+				}
+			}
+
+			if ( c.manifest ) {
+				const m = c.manifest;
+				const res = h.reconcile(
+					m.ignore === undefined ? c.rules : m.ignore, m.git || '', m.rsync || ''
+				);
+				const got = res.match ? 'MATCH' : 'MISMATCH';
+				if ( got !== m.expect ) {
+					errors.push( 'manifest: want ' + m.expect + ', got ' + got +
+						'\n' + res.output.split( '\n' ).slice( -12 ).map( ( l ) => '        ' + l ).join( '\n' ) );
+				}
+			}
+		} catch ( e ) {
+			errors.push( 'threw: ' + ( e && e.message ? e.message.split( '\n' )[ 0 ] : e ) );
+		}
+
+		if ( errors.length ) {
+			failures.push( { file, name: c.name, errors, rules: c.rules } );
+		} else {
+			pass++;
 		}
 	}
-
-	if ( errors.length ) failures.push( { name: c.name, errors, rules } );
-	else pass++;
 }
 
-// ---------------------------------------------------------------- unit assertions
-// reroot() and toGitignore() feed the manifest reconciliation, not rsync, so they are
-// checked directly rather than through a transfer.
-function unit( name, got, want ) {
-	if ( got === want ) pass++;
-	else failures.push( { name, errors: [ 'want ' + JSON.stringify( want ) + ', got ' + JSON.stringify( got ) ] } );
+if ( listOnly ) {
+	console.log( '\n' + Object.entries( perFile ).map( ( e ) => '  ' + e[ 0 ] + ': ' + e[ 1 ] ).join( '\n' ) );
+	console.log( '  total: ' + Object.values( perFile ).reduce( ( a, b ) => a + b, 0 ) );
+	process.exit( 0 );
 }
-
-const rr = formatter.parse( '/vendor/\n!/vendor/composer\nnode_modules/\n' );
-
-unit(
-	'reroot: anchored patterns gain the subdirectory prefix',
-	formatter.format( formatter.reroot( rr, 'wp-content' ) ),
-	'+ /wp-content/vendor/composer\n- node_modules/\n- /wp-content/vendor/'
-);
-unit(
-	// Regression: reroot used to rescore, which re-ranked anchored rules against
-	// unanchored ones. main.js builds the rsync filter from the UN-rerooted rules and the
-	// gitignore views from the rerooted ones, so rescoring made the manifest check
-	// disagree with what rsync actually did, and failed the deploy.
-	'reroot: rule order survives re-rooting',
-	formatter.format( formatter.reroot( rr, 'wp-content' ) ).replace( /\/wp-content/g, '' ),
-	formatter.format( rr )
-);
-unit(
-	'reroot + toGitignore: the manifest view keeps the filter\'s ordering',
-	formatter.toGitignore( formatter.reroot( formatter.parse( '!/plugins/\nnode_modules/\n' ), 'wp-content' ), 'not-sent' ),
-	'!/wp-content/plugins/\n!/wp-content/plugins/**\nnode_modules/'
-);
-unit(
-	'reroot: unanchored patterns are left alone',
-	formatter.format( formatter.reroot( formatter.parse( 'node_modules/' ), 'wp-content' ) ),
-	'- node_modules/'
-);
-unit(
-	'reroot: no relative path is a no-op',
-	formatter.format( formatter.reroot( rr, '' ) ),
-	formatter.format( rr )
-);
-
-const sides = formatter.parse( '/uploads/\nprotect /mu-plugins/\nhide /old/\n!/uploads/keep.txt\n' );
-
-unit(
-	'toGitignore not-sent: excludes and hides, negated by includes',
-	formatter.toGitignore( sides, 'not-sent' ),
-	'/uploads/\n/old/\n!/uploads/keep.txt'
-);
-unit(
-	'toGitignore not-deleted: adds protects, since rsync will not remove those',
-	formatter.toGitignore( sides, 'not-deleted' ),
-	'/uploads/\n/mu-plugins/\n/old/\n!/uploads/keep.txt'
-);
-unit(
-	'toGitignore hidden: only the hides',
-	formatter.toGitignore( sides, 'hidden' ),
-	'/old/'
-);
-unit(
-	'toGitignore: a re-included directory brings its contents',
-	formatter.toGitignore( formatter.parse( '/wp-content/*\n!/wp-content/plugins/' ), 'not-sent' ),
-	'/wp-content/*\n!/wp-content/plugins/\n!/wp-content/plugins/**'
-);
 
 for ( const f of failures ) {
-	console.log( '\x1b[31mFAIL\x1b[0m ' + f.name );
+	console.log( '\x1b[31mFAIL\x1b[0m [' + f.file.replace( /^cases-|\.js$/g, '' ) + '] ' + f.name );
 	f.errors.forEach( ( e ) => console.log( '       ' + e ) );
-	if ( f.rules ) console.log( '       filter:\n' + f.rules.split( '\n' ).map( ( l ) => '         ' + l ).join( '\n' ) );
+	if ( f.rules !== undefined ) {
+		console.log( '       rules: ' + JSON.stringify( String( f.rules ) ) );
+		console.log( '       filter:' );
+		try {
+			console.log( h.filterFor( f.rules ).split( '\n' ).map( ( l ) => '         ' + l ).join( '\n' ) );
+		} catch ( e ) {
+			console.log( '         <threw>' );
+		}
+	}
 }
 
-console.log( `\n${ pass } passed, ${ failures.length } failed` );
+if ( notes.length && ! filter ) {
+	console.log( '\n\x1b[36m' + notes.length + ' case(s) pin behaviour that is correct but surprising.\x1b[0m' +
+		'  (node tests/run.js --notes)' );
+}
+
+if ( bugs.length ) {
+	console.log( '\n\x1b[33m' + bugs.length + ' case(s) pin behaviour that is a DEFECT:\x1b[0m' );
+	if ( args.includes( '--bugs' ) || args.includes( '--notes' ) ) {
+		bugs.forEach( ( b ) => console.log( '  - [' + b.file.replace( /^cases-|\.js$/g, '' ) + '] ' + b.name + '\n      ' + b.why ) );
+	} else {
+		console.log( '  (node tests/run.js --bugs to list them)' );
+	}
+}
+
+if ( notes.length && args.includes( '--notes' ) ) {
+	console.log( '\n\x1b[36mCorrect but surprising:\x1b[0m' );
+	notes.forEach( ( b ) => console.log( '  - [' + b.file.replace( /^cases-|\.js$/g, '' ) + '] ' + b.name + '\n      ' + b.why ) );
+}
+
+if ( filter && pass + failures.length === 0 && ! listOnly ) {
+	console.error( 'no case matched "' + filter + '"' );
+	process.exit( 2 );
+}
+
+console.log( '\n' + pass + ' passed, ' + failures.length + ' failed' +
+	( skipped ? ', ' + skipped + ' skipped' : '' ) +
+	' (across ' + files.length + ' case file(s))' );
 process.exit( failures.length ? 1 : 0 );
