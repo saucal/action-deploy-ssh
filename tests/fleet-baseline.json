@@ -1,0 +1,327 @@
+{
+	"zz-kitchen-sink": {
+		"sent": 63,
+		"kept": 96,
+		"hash": "5f19b61859b4d520",
+		"manifest": "e2fcc2071ab9b2ab"
+	},
+	"tmp-wip-blackline-biotech": {
+		"sent": 62,
+		"kept": 96,
+		"hash": "f08601d2bdb7da37",
+		"manifest": "3ab6ef89c409c3e3"
+	},
+	"raven-rocks-precision": {
+		"sent": 62,
+		"kept": 96,
+		"hash": "e3ea9dedec878fce",
+		"manifest": "dbb0bcee4f4335fe"
+	},
+	"osg": {
+		"sent": 59,
+		"kept": 97,
+		"hash": "a25989633bd05b57",
+		"manifest": "304320efd78e5dd9"
+	},
+	"blackline-biotech": {
+		"sent": 62,
+		"kept": 96,
+		"hash": "f08601d2bdb7da37",
+		"manifest": "65aff3f94fbaeece"
+	},
+	"maintenance-cathayana": {
+		"sent": 58,
+		"kept": 97,
+		"hash": "f15fcb7f343bbd11",
+		"manifest": "f9dc5b59f9e4787f"
+	},
+	"pillarpeptides": {
+		"sent": 59,
+		"kept": 97,
+		"hash": "a25989633bd05b57",
+		"manifest": "90d1f9efeb34a140"
+	},
+	"asa-shop": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "6412d92cf80d3850",
+		"manifest": "4c5d2745662e2d42"
+	},
+	"leggariacademy": {
+		"sent": 64,
+		"kept": 89,
+		"hash": "cc623f0fd2657c7b",
+		"manifest": "4a7cbdc37450195f"
+	},
+	"dollartabs": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "d7d4414be3a864be",
+		"manifest": "d194257946564aa0"
+	},
+	"orbitextrax": {
+		"sent": 57,
+		"kept": 97,
+		"hash": "c78fd0bfb68db4be",
+		"manifest": "212a57bbcd8d74ff"
+	},
+	"repurposedmaterials": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "d7d4414be3a864be",
+		"manifest": "ebaf170bce53bac4"
+	},
+	"hrgoffroad": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "d7d4414be3a864be",
+		"manifest": "cc0f1a0ada95d81c"
+	},
+	"simply7oh": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "d7d4414be3a864be",
+		"manifest": "d194257946564aa0"
+	},
+	"sewing-machine-shop": {
+		"sent": 57,
+		"kept": 97,
+		"hash": "bd3be5a1beee7874",
+		"manifest": "643211ff712fa61d"
+	},
+	"lamarzoccousa": {
+		"sent": 45,
+		"kept": 99,
+		"hash": "3e304a9a4d90ed99",
+		"manifest": "ed8db2ded6af4759"
+	},
+	"omegaextrax": {
+		"sent": 59,
+		"kept": 100,
+		"hash": "117037152cb62b26",
+		"manifest": "bed55bed5b22c050"
+	},
+	"hawkridgesys": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "6412d92cf80d3850",
+		"manifest": "f6dd375db0592c1a"
+	},
+	"fitcreamery": {
+		"sent": 67,
+		"kept": 89,
+		"hash": "a7b0c297a572dd0a",
+		"manifest": "dec3c6aa35042499"
+	},
+	"springwell-water": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "d7d4414be3a864be",
+		"manifest": "a879d3b02d2ecf4b"
+	},
+	"biogeta": {
+		"sent": 62,
+		"kept": 97,
+		"hash": "8deb610471967b3f",
+		"manifest": "0b218e838d3d9bb8"
+	},
+	"pls": {
+		"sent": 61,
+		"kept": 97,
+		"hash": "a8e91b791326b72c",
+		"manifest": "0832e87107f5402b"
+	},
+	"bartenbach": {
+		"sent": 63,
+		"kept": 89,
+		"hash": "b4680d05879c7fcc",
+		"manifest": "d49e6cb5d124d812"
+	},
+	"maintenance-avison": {
+		"sent": 59,
+		"kept": 97,
+		"hash": "a25989633bd05b57",
+		"manifest": "5dcfd157207e1b1c"
+	},
+	"maintenance-flyingtech": {
+		"sent": 56,
+		"kept": 97,
+		"hash": "33fcfd84c6a1cefa",
+		"manifest": "0d1345216265e4ce"
+	},
+	"cash-fore-clubs": {
+		"sent": 62,
+		"kept": 97,
+		"hash": "8deb610471967b3f",
+		"manifest": "447d1d3c0a383129"
+	},
+	"ch-ordering": {
+		"sent": 67,
+		"kept": 87,
+		"hash": "04d30253fa1272cb",
+		"manifest": "c54d25d3e8054505"
+	},
+	"acknowledge": {
+		"sent": 58,
+		"kept": 97,
+		"hash": "55aa41c0de7ef981",
+		"manifest": "3fe9523d92ae637c"
+	},
+	"saucal-website-2024": {
+		"sent": 65,
+		"kept": 88,
+		"hash": "d73e386d38a900a9",
+		"manifest": "63e6ab38ccce2c44"
+	},
+	"ci-test-chris": {
+		"sent": 67,
+		"kept": 88,
+		"hash": "429d89909420f4f5",
+		"manifest": "77d6c2a046b6dcdb"
+	},
+	"purcrystal": {
+		"sent": 59,
+		"kept": 94,
+		"hash": "a644f30069e79a2b",
+		"manifest": "a53c9b2adc9af516"
+	},
+	"vesica-institute": {
+		"sent": 62,
+		"kept": 96,
+		"hash": "4b1fa6c364c71016",
+		"manifest": "ccbf292c5bb6a941"
+	},
+	"red-apple-lipstick": {
+		"sent": 64,
+		"kept": 89,
+		"hash": "08ca2a930926be19",
+		"manifest": "62719b5cf2a40e65"
+	},
+	"ld-web-temp": {
+		"sent": 37,
+		"kept": 103,
+		"hash": "941b991cffbf74a0",
+		"manifest": "7c293bd2f9faf842"
+	},
+	"cobratate-supplements": {
+		"sent": 61,
+		"kept": 94,
+		"hash": "aab3ec30b17f3698",
+		"manifest": "e691b775700c5b00"
+	},
+	"cobratate-members-mono": {
+		"sent": 70,
+		"kept": 88,
+		"hash": "0bc60424c5b3487d",
+		"manifest": "a526c8f3ed4c8131"
+	},
+	"open-studio": {
+		"sent": 67,
+		"kept": 87,
+		"hash": "1e5d000e70f6ea88",
+		"manifest": "98ebb94a47fd45cd"
+	},
+	"icg-bullion": {
+		"sent": 71,
+		"kept": 87,
+		"hash": "1946c0dce6e7af3a",
+		"manifest": "1f000e79b6fcf3b8"
+	},
+	"darkside-capital": {
+		"sent": 67,
+		"kept": 88,
+		"hash": "429d89909420f4f5",
+		"manifest": "9fb2b6e96dda2b38"
+	},
+	"topg": {
+		"sent": 63,
+		"kept": 96,
+		"hash": "5f19b61859b4d520",
+		"manifest": "50729f7ffddda152"
+	},
+	"saucal-audits-server": {
+		"sent": 79,
+		"kept": 84,
+		"hash": "7f3787c4b6c9401a",
+		"manifest": "80ad959bde3d9480"
+	},
+	"ci-test-ftp": {
+		"sent": 63,
+		"kept": 96,
+		"hash": "5f19b61859b4d520",
+		"manifest": "72d997d13296172f"
+	},
+	"quantum": {
+		"sent": 67,
+		"kept": 88,
+		"hash": "429d89909420f4f5",
+		"manifest": "863f3f6a199a98a1"
+	},
+	"saucal-package-server-companion": {
+		"sent": 81,
+		"kept": 84,
+		"hash": "d5d01cba5d35bafc",
+		"manifest": "6b90b0dcd75ddfa9"
+	},
+	"talkbox": {
+		"sent": 60,
+		"kept": 96,
+		"hash": "90407b15bb3dc227",
+		"manifest": "da7404efa68b9c90",
+		"localRoot": "wp-content"
+	},
+	"elka": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "6412d92cf80d3850",
+		"manifest": "a4b06c0e59d047f5"
+	},
+	"2m-networks": {
+		"sent": 58,
+		"kept": 97,
+		"hash": "f15fcb7f343bbd11",
+		"manifest": "d81115f373e0a72f"
+	},
+	"serviceapp-server": {
+		"sent": 81,
+		"kept": 84,
+		"hash": "d5d01cba5d35bafc",
+		"manifest": "6b90b0dcd75ddfa9"
+	},
+	"hellosubscription": {
+		"sent": 61,
+		"kept": 96,
+		"hash": "6412d92cf80d3850",
+		"manifest": "e2bc698dda08985a"
+	},
+	"harmony": {
+		"sent": 59,
+		"kept": 97,
+		"hash": "a25989633bd05b57",
+		"manifest": "7bcd51553095efef"
+	},
+	"phlearn": {
+		"sent": 60,
+		"kept": 96,
+		"hash": "839c992d5d07f965",
+		"manifest": "659dcec740e7face"
+	},
+	"inside": {
+		"sent": 15,
+		"kept": 114,
+		"hash": "332a042bb7771b3c",
+		"manifest": "03c0f5d0ff9eca18"
+	},
+	"melon-optics": {
+		"sent": 67,
+		"kept": 87,
+		"hash": "04d30253fa1272cb",
+		"manifest": "1ed29f9e36b590d6"
+	},
+	"leggari": {
+		"sent": 68,
+		"kept": 87,
+		"hash": "18b245c5d3f360c4",
+		"manifest": "4f9b664eb569fc72"
+	}
+}
