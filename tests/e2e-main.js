@@ -387,6 +387,74 @@ test( 'manifest: a subdirectory deploy is blocked when the release changes a fil
 	assert( r.content( '/plugins/acme/acme.php' ) !== 'v2', 'a blocked deploy still wrote' + show( r ) );
 }, { bug: 'The manifest is repo-rooted, but rsync only sees the deploy subdirectory, and the ignore list is re-rooted under it, so a changed root file (composer.lock after a composer update) can never reconcile. Matches two real failed production deploys on a subdirectory-deploy site; recovered with a forced deploy.' } );
 
+// ---- subdirectory deploys (SSH_LOCAL_ROOT / env-local-root pointing inside the repo) ------
+// The rsync filter is built from the rules as written, relative to the deploy root; the
+// manifest check gets copies re-rooted under the subdirectory, because the manifest is
+// repo-rooted. Two real bugs have lived in that split, so it gets its own scenarios.
+
+test( 'subdirectory: the ignore list still protects files on the server', () => {
+	const r = scenario( {
+		previous: [ '/composer.json', '/wp-content/plugins/acme/acme.php' ],
+		targetFromPrevious: true,
+		localSub: 'wp-content/',
+		target: { '/uploads/2024/photo.jpg': 'user upload', '/object-cache.php': 'dropin' },
+		build: { '/wp-content/plugins/acme/acme.php': 'v2' },
+		manifest: true,
+	} );
+	assert( r.code === 0, 'exit ' + r.code + show( r ) );
+	assert( r.content( '/plugins/acme/acme.php' ) === 'v2', 'not deployed' + show( r ) );
+	assert( r.exists( '/uploads/2024/photo.jpg' ), 'default list must protect /uploads/' + show( r ) );
+	assert( r.exists( '/object-cache.php' ), 'default list must protect /object-cache.php' + show( r ) );
+	assert( ! r.exists( '/composer.json' ), 'a file outside the deploy root reached the server' + show( r ) );
+} );
+
+test( 'subdirectory: a normal release with additions and deletions reconciles', () => {
+	const r = scenario( {
+		previous: [ '/wp-content/plugins/acme/acme.php', '/wp-content/plugins/gone/gone.php' ],
+		targetFromPrevious: true,
+		localSub: 'wp-content/',
+		remove: [ '/wp-content/plugins/gone' ],
+		build: { '/wp-content/plugins/acme/acme.php': 'v2', '/wp-content/themes/t/style.css': 'css' },
+		manifest: true,
+	} );
+	assert( r.code === 0, 'exit ' + r.code + show( r ) );
+	assert( r.content( '/plugins/acme/acme.php' ) === 'v2', 'update not deployed' + show( r ) );
+	assert( r.exists( '/themes/t/style.css' ), 'addition not deployed' + show( r ) );
+	assert( ! r.exists( '/plugins/gone/gone.php' ), 'deletion not applied' + show( r ) );
+} );
+
+test( 'subdirectory: the consistency check passes in sync and fails on drift', () => {
+	const base = {
+		previous: [ '/wp-content/plugins/acme/acme.php' ],
+		build: { '/wp-content/plugins/acme/acme.php': '/wp-content/plugins/acme/acme.php\n' },
+		targetFromPrevious: true,
+		localSub: 'wp-content/',
+		inputs: { 'consistency-check': 'true' },
+	};
+	const clean = scenario( base );
+	assert( clean.code === 0, 'in-sync subdirectory target should pass, exit ' + clean.code + show( clean ) );
+	const drift = scenario( Object.assign( {}, base, { target: { '/plugins/acme/hotfix.php': 'edited on the server' } } ) );
+	assert( drift.code === 1, 'drift should fail the check, exit ' + drift.code + show( drift ) );
+	assert( JSON.stringify( drift.before ) === JSON.stringify( drift.after ), 'a failed check wrote to the target' + show( drift ) );
+} );
+
+test( 'subdirectory: protect and hide work and the manifest check passes', () => {
+	const r = scenario( {
+		previous: [ '/wp-content/mu-plugins/ours.php', '/wp-content/plugins/old/old.php', '/wp-content/plugins/acme/acme.php' ],
+		targetFromPrevious: true,
+		localSub: 'wp-content/',
+		target: { '/mu-plugins/host-managed.php': 'placed by the host' },
+		remove: [ '/wp-content/plugins/old' ],
+		build: { '/wp-content/mu-plugins/ours.php': 'v2' },
+		manifest: true,
+		inputs: { 'force-ignore-extra': 'protect /mu-plugins/\nhide /plugins/old/' },
+	} );
+	assert( r.code === 0, 'exit ' + r.code + show( r ) );
+	assert( r.content( '/mu-plugins/ours.php' ) === 'v2', 'protected path not deployed' + show( r ) );
+	assert( r.exists( '/mu-plugins/host-managed.php' ), 'protect let --delete remove a host file' + show( r ) );
+	assert( ! r.exists( '/plugins/old/old.php' ), 'hide left the retired path on the server' + show( r ) );
+} );
+
 // ---- protect / hide through the real main.js ---------------------------------------
 
 test( 'protect: our files are deployed, files already on the server are kept', () => {
