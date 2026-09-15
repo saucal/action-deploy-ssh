@@ -75,12 +75,12 @@ function gitignoreAfter( seed, ignoreList ) {
 }
 
 // ---------------------------------------------------------------------------
-// The repo-rooting path main.js takes when env-local-root is a subdirectory: parse the
-// list, formatter.reroot() it, and hand the script the toGitignore() view.
+// Subdirectory deploys: main.js scopes the repo-rooted git manifest to the deploy root
+// (drops paths outside it, strips the prefix from the rest), and the script compares it
+// with rsync's plan using the ignore rules exactly as written. No rule is rewritten.
 const formatter = require( path.join( ACTION_DIR, 'rsyncRulesFormatter' ) );
-function repoRoot( ignoreList, relativePath ) {
-	return formatter.toGitignore( formatter.reroot( formatter.parse( ignoreList ), relativePath ), 'not-sent' );
-}
+const h = require( './harness' );
+const scope = ( text, prefix ) => formatter.scopeManifest( text, prefix );
 
 // Scale fixtures.
 function bigManifest( n ) {
@@ -632,68 +632,57 @@ module.exports = [
 	),
 
 	// -----------------------------------------------------------------------
-	// 11. Repo-rooting. When env-local-root is a subdirectory of the repo, main.js
-	//     re-roots the parsed rules (formatter.reroot) before building the gitignore
-	//     views for this script, and prefixes the rsync manifest to match.
+	// 11. Subdirectory deploys. The manifest is repo-rooted; rsync only ever sees the
+	//     deploy root. main.js converts the manifest's PATHS once, instead of rewriting
+	//     the rules, so the check and rsync use one set of rules in one coordinate system.
 	// -----------------------------------------------------------------------
 	pinEqual(
-		'manifest: repo-rooting an anchored pattern inserts the subdirectory',
-		() => repoRoot( '/uploads/', 'wp-content' ),
-		'/wp-content/uploads/'
+		'manifest: scoping keeps paths inside the deploy root and strips the prefix',
+		() => scope( '+ wp-content/plugins/a.php\n- wp-content/themes/t/old.css\n', 'wp-content' ),
+		'+ plugins/a.php\n- themes/t/old.css\n'
 	),
 	pinEqual(
-		'manifest: repo-rooting an anchored file pattern inserts the subdirectory',
-		() => repoRoot( '/composer.json', 'wp-content' ),
-		'/wp-content/composer.json'
+		// The subdirectory-deploy bug: a composer update changes root files rsync never sees,
+		// and the release used to be blocked until someone forced the deploy.
+		'manifest: scoping drops paths outside the deploy root',
+		() => scope( '+ composer.lock\n+ vendor/composer/installed.json\n+ wp-content/plugins/a.php\n', 'wp-content' ),
+		'+ plugins/a.php\n'
 	),
 	pinEqual(
-		'manifest: repo-rooting leaves an UNANCHORED pattern alone',
-		() => repoRoot( '.DS_Store', 'wp-content' ),
-		'.DS_Store'
+		'manifest: scoping matches the prefix by whole path segment',
+		() => scope( '+ wp-content-old/x.php\n+ wp-content/x.php\n', 'wp-content' ),
+		'+ x.php\n'
 	),
 	pinEqual(
-		'manifest: repo-rooting leaves an unanchored NEGATION alone',
-		() => repoRoot( '!keep.log', 'wp-content' ),
-		'!keep.log'
+		// build-to-git's diff-tree quotes non-ASCII names; the prefix sits inside the quotes.
+		'manifest: scoping handles git-quoted paths',
+		() => scope( '+ "wp-content/caf\\303\\251.php"\n+ "root-caf\\303\\251.txt"\n', 'wp-content' ),
+		'+ "caf\\303\\251.php"\n'
 	),
 	pinEqual(
-		// Before #22 main.js rewrote this with `line.substring( 2 )` and produced
-		// "!/wp-contentkeep.log", a pattern that matches nothing.
-		'manifest: repo-rooting an ANCHORED NEGATION keeps the path separator',
-		() => repoRoot( '!/keep.log', 'wp-content' ),
-		'!/wp-content/keep.log'
+		'manifest: scoping handles a nested deploy root',
+		() => scope( '+ site/wp-content/a.php\n+ site/other.php\n', 'site/wp-content' ),
+		'+ a.php\n'
 	),
 	pinEqual(
-		'manifest: repo-rooting a multi-segment anchored negation keeps the separator too',
-		() => repoRoot( '!/uploads/keep.txt', 'wp-content' ),
-		'!/wp-content/uploads/keep.txt'
+		'manifest: scoping with no subdirectory changes nothing',
+		() => scope( '+ composer.lock\n- plugins/a.php\n', '' ),
+		'+ composer.lock\n- plugins/a.php\n'
 	),
 	{
-		name: 'manifest: a CORRECTLY repo-rooted negation reconciles cleanly',
-		manifest: {
-			ignore: '/wp-content/*.log\n!/wp-content/keep.log\n',
-			git: '+ wp-content/keep.log\n+ wp-content/drop.log\n',
-			rsync: 'wp-content/keep.log\n',
-			expect: 'MATCH',
-		},
-	},
-	{
-		name: 'manifest: the pre-#22 separator-less negation would fail the deploy',
-		manifest: {
-			ignore: '/wp-content/*.log\n!/wp-contentkeep.log\n',
-			git: '+ wp-content/keep.log\n+ wp-content/drop.log\n',
-			rsync: 'wp-content/keep.log\n',
-			expect: 'MISMATCH',
-		},
-	},
-	{
-		// End to end: env-local-root=<repo>/wp-content with "/*.log" plus "!/keep.log".
-		name: 'manifest: the negation main.js now produces for a subdirectory deploy reconciles',
-		manifest: {
-			ignore: repoRoot( '/*.log\n!/keep.log', 'wp-content' ),
-			git: '+ wp-content/keep.log\n+ wp-content/drop.log\n',
-			rsync: 'wp-content/keep.log\n',
-			expect: 'MATCH',
+		// End to end, env-local-root=<repo>/wp-content with "/*.log" plus "!/keep.log": the
+		// scoped manifest and rsync's plan are both deploy-root relative, and the rules are
+		// used as written.
+		name: 'manifest: a scoped subdirectory manifest reconciles with the rules as written',
+		check() {
+			const res = h.reconcile(
+				'/*.log\n!/keep.log\n',
+				scope( '+ wp-content/keep.log\n+ wp-content/drop.log\n+ composer.lock\n', 'wp-content' ),
+				'keep.log\n'
+			);
+			if ( ! res.match ) {
+				throw new Error( 'expected MATCH\n' + res.output.split( '\n' ).slice( -10 ).join( '\n' ) );
+			}
 		},
 	},
 

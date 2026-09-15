@@ -45,7 +45,6 @@
 			suspectRules.map( ( rule ) => '"' + rule.pattern + '"' ).join( ', ' )
 		);
 	}
-	let ignoreRulesRepoRooted = ignoreRules;
 
 	let shellParams = core.getInput( 'ssh-shell-params', { required: false } );
 	let sshFlags = core.getInput( 'ssh-flags', { require: true } );
@@ -73,12 +72,15 @@
 		}
 	}
 
-	if ( localRoot != localRootRepo ) {
-		console.log( 'Local root is a subdirectory adjusting ignore lists and paths' );
+	// When the deploy root is a subdirectory of the repo, everything is compared in
+	// deploy-root paths: rsync already works there, and the repo-rooted git manifest is
+	// scoped to it once (see rsyncRulesFormatter.scopeManifest). The ignore rules are used
+	// exactly as written everywhere -- never rewritten.
+	const deployPrefix = path.relative( localRootRepo, localRoot );
+	if ( deployPrefix ) {
+		console.log( 'Local root is a subdirectory of the repo: comparing paths relative to it' );
 		console.log( 'Using local root: ' + localRoot );
 		console.log( 'Using local repo root: ' + localRootRepo );
-		const relativePath = path.relative( localRootRepo, localRoot );
-		ignoreRulesRepoRooted = rsyncRulesFormatter.reroot( ignoreRules, relativePath );
 	}
 
 	// Make sure paths end with a slash.
@@ -311,8 +313,10 @@
 				await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
 					env: {
 						PATH_DIR: localRootRepo,
-						// Paths rsync never transfers, so they cannot be real drift.
-						IGNORE_LIST: rsyncRulesFormatter.toGitignore( ignoreRulesRepoRooted, 'not-sent' ),
+						// Paths rsync never transfers, so they cannot be real drift. Matched
+						// against paths relative to DEPLOY_ROOT, like the rules themselves.
+						IGNORE_LIST: rsyncRulesFormatter.toGitignore( ignoreRules, 'not-sent' ),
+						DEPLOY_ROOT: deployPrefix,
 					},
 					listeners: {
 						stdline: ( data ) => {
@@ -366,26 +370,21 @@
 		}
 
 		var { code, processedFiles, bufferPath: rsyncManifest } = await runCommand( dryRunCommand, core.isDebug() );
-		var rsyncManifestRepoRooted = fs.readFileSync( rsyncManifest, 'utf8' ).toString();
-		
-		if ( localRoot != localRootRepo ) {
-			console.log( 'Adjusting rsync manifest to be repo-rooted' );
-			var relativeRoot = path.relative( localRootRepo, localRoot ) + '/';
-			rsyncManifestRepoRooted = rsyncManifestRepoRooted.split('\n').map( ( line ) => {
-				if ( line.startsWith( 'deleting ' ) ) {
-					line = line.replace( /^deleting /, '' );
-					return 'deleting ' + relativeRoot + line;
-				} else if ( line.length > 0 ) {
-					return relativeRoot + line;
-				} else {
-					return line;
-				}
-			}).join('\n');
-		}
+		// rsync's plan is relative to the deploy root, which is what the check compares in.
+		var rsyncPlan = fs.readFileSync( rsyncManifest, 'utf8' ).toString();
 
-		// Functional rsync plan: written raw and header-free. check-against-manifest.sh
-		// sed-mutates this file in place, so it must not carry our presentation headers.
-		var rsyncPlanFunctionalPath = writeBufferToFile( rsyncManifestRepoRooted, 'rsync-sync-plan-check' );
+		// Functional rsync plan: written raw and header-free, so the check never sees our
+		// presentation headers.
+		var rsyncPlanFunctionalPath = writeBufferToFile( rsyncPlan, 'rsync-sync-plan-check' );
+
+		// The artifact shows repo-rooted paths, so it lines up with the git diffs next to it.
+		// Display only: no decision is made from this copy.
+		var rsyncPlanForDisplay = ! deployPrefix ? rsyncPlan : rsyncPlan.split( '\n' ).map( ( line ) => {
+			if ( line.startsWith( 'deleting ' ) ) {
+				return 'deleting ' + deployPrefix + '/' + line.slice( 'deleting '.length );
+			}
+			return line.length ? deployPrefix + '/' + line : line;
+		} ).join( '\n' );
 
 		// All artifact files (headers + friendly names) are prepared here, at archive
 		// time, from the raw data above. The functional files above stay untouched.
@@ -403,7 +402,7 @@
 				"# differ from the git content diffs in the 'consistency-diffs' artifact.\n" +
 				'# This is a dry-run; nothing has been written to the target.\n' +
 				'##################################################################\n\n';
-			core.setOutput( 'bufferPath', writeBufferToFile( rsyncPlanHeader + rsyncManifestRepoRooted, 'rsync-sync-plan' ) );
+			core.setOutput( 'bufferPath', writeBufferToFile( rsyncPlanHeader + rsyncPlanForDisplay, 'rsync-sync-plan' ) );
 
 			if ( opts.needDiff ) {
 				core.setOutput( 'diffPath', await getRsyncDiff() );
@@ -457,15 +456,20 @@
 			// Guarded: the script tolerates a missing manifest, so we must not throw here either.
 			var gitManifestRaw = fs.existsSync( manifest ) ? fs.readFileSync( manifest, 'utf8' ).toString() : '';
 			var manifestDiffOut = path.join( process.env.RUNNER_TEMP || '/tmp', 'manifest-mismatch_' + timestamp + '.diff' );
+			// build-to-git's manifest is repo-rooted; put it in deploy-root paths, dropping
+			// changes outside the deploy root (rsync can never send those).
+			var gitManifestScoped = deployPrefix
+				? writeBufferToFile( rsyncRulesFormatter.scopeManifest( gitManifestRaw, deployPrefix ), 'git-manifest-scoped' )
+				: manifest;
 			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
 				env: {
 					PATH_DIR: localRootRepo,
 					// Three views of the same rules, one per class of mismatch the
 					// manifest check has to forgive. See rsyncRulesFormatter.toGitignore.
-					SSH_IGNORE_LIST: rsyncRulesFormatter.toGitignore( ignoreRulesRepoRooted, 'not-sent' ),
-					SSH_NOT_DELETED_LIST: rsyncRulesFormatter.toGitignore( ignoreRulesRepoRooted, 'not-deleted' ),
-					SSH_HIDDEN_LIST: rsyncRulesFormatter.toGitignore( ignoreRulesRepoRooted, 'hidden' ),
-					GIT_MANIFEST: manifest,
+					SSH_IGNORE_LIST: rsyncRulesFormatter.toGitignore( ignoreRules, 'not-sent' ),
+					SSH_NOT_DELETED_LIST: rsyncRulesFormatter.toGitignore( ignoreRules, 'not-deleted' ),
+					SSH_HIDDEN_LIST: rsyncRulesFormatter.toGitignore( ignoreRules, 'hidden' ),
+					GIT_MANIFEST: gitManifestScoped,
 					RSYNC_MANIFEST: rsyncPlanFunctionalPath,
 					GITHUB_WORKSPACE: process.env.GITHUB_WORKSPACE,
 					MANIFEST_DIFF_OUT: manifestDiffOut,

@@ -731,22 +731,23 @@ module.exports = [
 	},
 	// ------------------------------------------------ the `\` escape added by #22
 	{
-		name: 'patterns: a leading \\ before a glob character makes the glob REAL',
-		bug: 'Regression from #22. Before, and in git, `\\*.log` matches only a file literally named `*.log`. The new escape strips the backslash, so the rule becomes `*.log` and excludes every .log file at any depth. Same for `\\?` and `\\[`. The manifest view is stripped the same way, so the check does not catch it. No live ignore list uses a leading backslash.',
+		// Before the fix, #22's escape stripped the backslash, so `\\*.log` excluded every
+		// .log file at any depth. It stays a literal `*`, as before #22 and as git reads it.
+		name: 'patterns: a leading \\ before a glob character keeps the character literal',
 		rules: '\\*.log',
-		filter: '- *.log',
+		filter: '- \\*.log',
 		local: [ '/keep.php' ],
-		send: { '/a.log': 'IGNORED', '/deep/b.log': 'IGNORED', '/keep.php': 'SENT' },
+		send: { '/a.log': 'SENT', '/deep/b.log': 'SENT', '/keep.php': 'SENT' },
 	},
 	{
-		name: 'patterns: an escaped \\# or \\! is lost in the manifest view',
-		bug: 'The rsync filter handles `\\#a.php` correctly, but toGitignore() emits `#a.php`, which git reads as a comment (and `\\!a.php` becomes a negation). rsync skips the file while the manifest check keeps it, so a release changing that file is blocked.',
+		name: 'patterns: an escaped \\# reconciles in the manifest check',
 		rules: '\\#a.php',
-		manifest: {
-			git: '+ #a.php\n+ b.php\n',
-			rsync: 'b.php\n',
-			expect: 'MISMATCH',
-		},
+		manifest: { git: '+ #a.php\n+ b.php\n', rsync: 'b.php\n', expect: 'MATCH' },
+	},
+	{
+		name: 'patterns: an escaped \\! reconciles in the manifest check',
+		rules: '\\!a.php',
+		manifest: { git: '+ !a.php\n+ b.php\n', rsync: 'b.php\n', expect: 'MATCH' },
 	},
 
 ];

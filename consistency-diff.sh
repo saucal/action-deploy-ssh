@@ -10,10 +10,20 @@ cd "${PATH_DIR}" || exit 1;
 # changed between builds would otherwise show up in the HEAD~1 diff even though rsync
 # leaves it untouched.
 exclude_file=""
+match_repo=""
 if [ -n "$IGNORE_LIST" ]; then
   exclude_file="$(mktemp)"
   printf '%s\n' "$IGNORE_LIST" > "$exclude_file"
+  # The rules are relative to the deploy root, so match them in an empty throwaway repo
+  # against deploy-root paths: inside this checkout they would anchor to the repo root and
+  # pick up the checkout's own .gitignore as well.
+  match_repo="$(mktemp -d)"
+  git init -q "$match_repo"
 fi
+
+# DEPLOY_ROOT is the deploy root relative to this repo ("" when they are the same). A
+# change outside it is never deployed, so it is not drift.
+deploy_root="${DEPLOY_ROOT%/}"
 
 # Longest line kept verbatim before it is truncated to a size summary. Minified css/js
 # is one line of hundreds of KB; printing it whole buries the actual change.
@@ -25,7 +35,14 @@ MAX_LINE=300
 # noise, and only the changed lines answer "what differs".
 git add -A . > /dev/null 2>&1
 git --no-pager diff -R -M --name-status "$REF" | while read status file; do
-  if [ -n "$exclude_file" ] && git -c core.excludesFile="$exclude_file" check-ignore -q --no-index "$file"; then
+  rel="$file"
+  if [ -n "$deploy_root" ]; then
+    case "$file" in
+      "$deploy_root"/*) rel="${file#"$deploy_root"/}" ;;
+      *) continue ;;
+    esac
+  fi
+  if [ -n "$exclude_file" ] && git -C "$match_repo" -c core.excludesFile="$exclude_file" check-ignore -q --no-index -- "$rel"; then
     continue
   fi
   if [ "$status" = "M" ]; then
@@ -67,4 +84,5 @@ done
 # Guarded rm returns 1 when there is no ignore list, which would make a clean run look
 # like a failure; the script has no other failure signal, so end on 0 explicitly.
 [ -n "$exclude_file" ] && rm -f "$exclude_file"
+[ -n "$match_repo" ] && rm -rf "$match_repo"
 exit 0

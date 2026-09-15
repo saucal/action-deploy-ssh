@@ -141,6 +141,16 @@ function scenario( opts ) {
 		cwd: ws, env, encoding: 'utf8', timeout: 120000,
 	} );
 
+	// The drift diff main.js writes when a check fails (the diffPath output), read before cleanup.
+	let driftDiff = '';
+	const outputs = fs.readFileSync( path.join( runnerTemp, 'output' ), 'utf8' );
+	const dm = outputs.match( /^diffPath<<(\S+)\n([\s\S]*?)\n\1$/m );
+	if ( dm && fs.existsSync( dm[ 2 ] ) ) {
+		for ( const f of fs.readdirSync( dm[ 2 ] ) ) {
+			driftDiff += '### ' + f + '\n' + fs.readFileSync( path.join( dm[ 2 ], f ), 'utf8' ) + '\n';
+		}
+	}
+
 	// Snapshot BEFORE cleanup: a lazy read after the workspace is gone makes every
 	// "does not exist" assertion pass for free.
 	const after = tree( target );
@@ -157,6 +167,7 @@ function scenario( opts ) {
 		before,
 		after,
 		modes,
+		driftDiff,
 		content: ( p ) => {
 			if ( ! ( p in files ) ) {
 				throw new Error( p + ' is not on the target' );
@@ -374,7 +385,9 @@ test( 'manifest: an anchored negation in a subdirectory deploy is re-rooted corr
 	assert( r.content( '/keep.log' ) === 'changed', 'the re-included log was not deployed' + show( r ) );
 } );
 
-test( 'manifest: a subdirectory deploy is blocked when the release changes a file outside it', () => {
+test( 'manifest: a subdirectory deploy is not blocked by a change outside the deploy root', () => {
+	// A composer update changes root files rsync never sees. This used to block the release
+	// until someone forced the deploy; the manifest is now scoped to the deploy root.
 	const r = scenario( {
 		previous: [ '/composer.lock', '/wp-content/plugins/acme/acme.php' ],
 		targetFromPrevious: true,
@@ -382,10 +395,10 @@ test( 'manifest: a subdirectory deploy is blocked when the release changes a fil
 		build: { '/composer.lock': 'updated', '/wp-content/plugins/acme/acme.php': 'v2' },
 		manifest: true,
 	} );
-	assert( r.code !== 0, 'expected the deploy to be blocked (today), got 0' + show( r ) );
-	assert( /DO NOT MATCH/.test( r.out ) && /^-composer\.lock$/m.test( r.out ), 'blocked, but not by the root composer.lock' + show( r ) );
-	assert( r.content( '/plugins/acme/acme.php' ) !== 'v2', 'a blocked deploy still wrote' + show( r ) );
-}, { bug: 'The manifest is repo-rooted, but rsync only sees the deploy subdirectory, and the ignore list is re-rooted under it, so a changed root file (composer.lock after a composer update) can never reconcile. Matches two real failed production deploys on a subdirectory-deploy site; recovered with a forced deploy.' } );
+	assert( r.code === 0, 'expected the deploy to go through, exit ' + r.code + show( r ) );
+	assert( r.content( '/plugins/acme/acme.php' ) === 'v2', 'the release was not deployed' + show( r ) );
+	assert( ! r.exists( '/composer.lock' ), 'a file outside the deploy root reached the server' + show( r ) );
+} );
 
 // ---- subdirectory deploys (SSH_LOCAL_ROOT / env-local-root pointing inside the repo) ------
 // The rsync filter is built from the rules as written, relative to the deploy root; the
@@ -453,6 +466,51 @@ test( 'subdirectory: protect and hide work and the manifest check passes', () =>
 	assert( r.content( '/mu-plugins/ours.php' ) === 'v2', 'protected path not deployed' + show( r ) );
 	assert( r.exists( '/mu-plugins/host-managed.php' ), 'protect let --delete remove a host file' + show( r ) );
 	assert( ! r.exists( '/plugins/old/old.php' ), 'hide left the retired path on the server' + show( r ) );
+} );
+
+test( 'manifest: a release that changes an ignored file still reconciles', () => {
+	const r = scenario( {
+		previous: [ '/composer.json', '/plugins/acme/acme.php' ],
+		targetFromPrevious: true,
+		build: { '/composer.json': '{"changed":true}', '/plugins/acme/acme.php': 'v2' },
+		manifest: true,
+	} );
+	// composer.json is in the manifest but excluded by the default list, so the check has to
+	// drop it -- which only works if check-ignore actually runs against the rules.
+	assert( r.code === 0, 'exit ' + r.code + show( r ) );
+	assert( r.content( '/plugins/acme/acme.php' ) === 'v2', 'not deployed' + show( r ) );
+	assert( r.content( '/composer.json' ) !== '{"changed":true}', 'an excluded file was overwritten on the server' + show( r ) );
+} );
+
+test( 'subdirectory: a release that changes an ignored file still reconciles', () => {
+	const r = scenario( {
+		previous: [ '/wp-content/vendor/lib/x.php', '/wp-content/plugins/acme/acme.php' ],
+		targetFromPrevious: true,
+		localSub: 'wp-content/',
+		build: { '/wp-content/vendor/lib/x.php': 'changed', '/wp-content/plugins/acme/acme.php': 'v2' },
+		manifest: true,
+	} );
+	// /vendor/ is anchored at the deploy root; the scoped manifest path vendor/lib/x.php must
+	// match it as written.
+	assert( r.code === 0, 'exit ' + r.code + show( r ) );
+	assert( r.content( '/plugins/acme/acme.php' ) === 'v2', 'not deployed' + show( r ) );
+} );
+
+test( 'subdirectory: the drift diff does not report changes outside the deploy root', () => {
+	const r = scenario( {
+		// release-notes.txt sits at the repo root, outside the deploy root, and no ignore rule
+		// covers it: only scoping to the deploy root keeps it out of the diff.
+		previous: [ '/release-notes.txt', '/wp-content/plugins/acme/acme.php' ],
+		build: { '/release-notes.txt': 'updated between builds', '/wp-content/plugins/acme/acme.php': '/wp-content/plugins/acme/acme.php\n' },
+		targetFromPrevious: true,
+		localSub: 'wp-content/',
+		target: { '/plugins/acme/hotfix.php': 'edited on the server' },
+		inputs: { 'consistency-check': 'true' },
+	} );
+	assert( r.code === 1, 'drift should fail the check, exit ' + r.code + show( r ) );
+	assert( r.driftDiff.length > 0, 'no drift diff was written' + show( r ) );
+	assert( /hotfix\.php/.test( r.driftDiff ), 'the real drift is missing from the diff\n' + r.driftDiff );
+	assert( ! /release-notes\.txt/.test( r.driftDiff ), 'a change outside the deploy root was reported as drift\n' + r.driftDiff );
 } );
 
 // ---- protect / hide through the real main.js ---------------------------------------

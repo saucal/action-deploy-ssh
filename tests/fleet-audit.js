@@ -110,10 +110,11 @@ for ( const repo of repos ) {
 	// rules. rsync is forgiving about things git is not (stray whitespace in a pattern,
 	// for one), so a change can be invisible to the transfer and still break the
 	// reconciliation. Hash the views for every repo, not just the re-rooted ones.
+	// The views use the rules as written for every site, including subdirectory deploys:
+	// main.js scopes the manifest's paths to the deploy root instead of rewriting rules.
 	const localRoot = vars.SSH_LOCAL_ROOT && vars.SSH_LOCAL_ROOT !== 'false' ? vars.SSH_LOCAL_ROOT : '';
-	const scoped = localRoot ? formatter.reroot( rules, localRoot ) : rules;
 	entry.manifest = digest( [ 'not-sent', 'not-deleted', 'hidden' ]
-		.map( ( side ) => formatter.toGitignore( scoped, side ) )
+		.map( ( side ) => formatter.toGitignore( rules, side ) )
 		.join( ' ' ) );
 	if ( localRoot ) {
 		entry.localRoot = localRoot;
