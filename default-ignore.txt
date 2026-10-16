@@ -28,6 +28,10 @@
 /auth.json
 /composer.json
 /composer.lock
+# cweagans/composer-patches: patch sources and the local applied-marker are build inputs, not site files
+/patches/
+/patches.lock.json
+/.patches_applied
 
 # Dropins usually managed by plugins or caching systems
 /object-cache.php
