@@ -28,8 +28,10 @@
 /auth.json
 /composer.json
 /composer.lock
-# The old local "patches applied" marker (a build artefact, not a site file). patches/ itself stays
-# visible: repos commit it, and anything dropped into wp-content/patches/ must show as drift.
+# cweagans/composer-patches build inputs, not site files: the patch files themselves, their lock and
+# the old local "applied" marker. Anything else in patches/ (e.g. a dropped .php) still shows as drift.
+/patches/*.patch
+/patches.lock.json
 /.patches_applied
 
 # Dropins usually managed by plugins or caching systems
