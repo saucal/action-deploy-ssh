@@ -441,13 +441,15 @@
 			if( processedFiles > 0 ) {
 				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
 				await prepareArtifacts( { needDiff: true } );
+				// Fail on the drift first: a failing hook below exits the process, and the job's error
+				// should still name the drift.
+				core.setFailed(
+					'Pre-push consistency check failed. Target filesystem does not match build directory.'
+				);
 				// Still run the pre hooks: in a consistency check they only inspect (e.g. the WP core
 				// hook records the server's core version), so reconcile sees core drift in the same run
 				// instead of only after the file drift is fixed.
 				await handleHookedActions( 'pre' );
-				core.setFailed(
-					'Pre-push consistency check failed. Target filesystem does not match build directory.'
-				);
 				process.exit( 1 );
 			}
 		}
