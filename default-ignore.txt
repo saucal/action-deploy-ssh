@@ -28,6 +28,11 @@
 /auth.json
 /composer.json
 /composer.lock
+# cweagans/composer-patches build inputs, not site files: the patch files themselves, their lock and
+# the old local "applied" marker. Anything else in patches/ (e.g. a dropped .php) still shows as drift.
+/patches/*.patch
+/patches.lock.json
+/.patches_applied
 
 # Dropins usually managed by plugins or caching systems
 /object-cache.php

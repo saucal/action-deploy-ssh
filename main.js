@@ -372,6 +372,9 @@
 		var { code, processedFiles, bufferPath: rsyncManifest } = await runCommand( dryRunCommand, core.isDebug() );
 		// rsync's plan is relative to the deploy root, which is what the check compares in.
 		var rsyncPlan = fs.readFileSync( rsyncManifest, 'utf8' ).toString();
+		// Directory entries don't count, as in check-against-manifest.sh: git tracks files, and any file
+		// in a directory has its own line. A bare "patches/" only means every file in it is ignored.
+		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) ).length;
 
 		// Functional rsync plan: written raw and header-free, so the check never sees our
 		// presentation headers.
@@ -441,9 +444,15 @@
 			if( processedFiles > 0 ) {
 				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
 				await prepareArtifacts( { needDiff: true } );
+				// Fail on the drift first: a failing hook below exits the process, and the job's error
+				// should still name the drift.
 				core.setFailed(
 					'Pre-push consistency check failed. Target filesystem does not match build directory.'
 				);
+				// Still run the pre hooks: in a consistency check they only inspect (e.g. the WP core
+				// hook records the server's core version), so reconcile sees core drift in the same run
+				// instead of only after the file drift is fixed.
+				await handleHookedActions( 'pre' );
 				process.exit( 1 );
 			}
 		}
@@ -512,6 +521,8 @@
 						REMOTE_ROOT: remoteRoot,
 						SSHPASS: sshPass,
 						CONSISTENCY_CHECK: ( ( consistencyCheck || manifest != '' ) ? 'true' : 'false' ),
+						// A pure consistency check (no manifest) writes nothing: hooks must only inspect.
+						DRY_RUN: ( consistencyCheck ? 'true' : 'false' ),
 						RUNNER_TEMP: process.env.RUNNER_TEMP,
 					},
 					ignoreReturnCode: true,
