@@ -72,7 +72,8 @@ git_side="$(
 # Directory entries are dropped from both -- git tracks files, not directories.
 rsync_side="$(
 	{
-		grep -v '^deleting ' "$rsync_file" | grep -v '/$'
+		# "cannot delete non-empty directory" is rsync keeping a directory whose files are protected.
+		grep -v -e '^deleting ' -e '^cannot delete non-empty directory: ' "$rsync_file" | grep -v '/$'
 		grep '^deleting ' "$rsync_file" | sed -E 's/^deleting //' | grep -v '/$' \
 			| keep_unignored "$SSH_HIDDEN_LIST"
 	} | grep -v '^$' | sort

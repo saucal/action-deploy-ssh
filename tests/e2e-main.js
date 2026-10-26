@@ -341,7 +341,7 @@ test( 'manifest: an added symlink blocks the deploy', () => {
 	assert( /DO NOT MATCH/.test( r.out ) && /alias\.php -> base\.php/.test( r.out ), 'blocked, but not by the symlink line' + show( r ) );
 }, { bug: 'rsync lists a symlink as "alias.php -> base.php"; the manifest has "alias.php", so they never reconcile.' } );
 
-test( 'consistency-check: a protected file inside a removed directory blocks every future check', () => {
+test( 'consistency-check: a protected file inside a removed directory does not count as drift', () => {
 	const base = {
 		previous: [ '/plugins/acme/acme.php' ],
 		build: { '/plugins/acme/acme.php': '/plugins/acme/acme.php\n' },
@@ -357,10 +357,10 @@ test( 'consistency-check: a protected file inside a removed directory blocks eve
 	const r = scenario( Object.assign( {}, base, {
 		target: { '/plugins/wp-rocket/licence-data.php': 'licence written by the plugin' },
 	} ) );
-	assert( r.code === 1, 'expected exit 1, got ' + r.code + show( r ) );
-	assert( /cannot delete non-empty directory: plugins\/wp-rocket/.test( r.out ),
-		'failed, but not because of the undeletable directory' + show( r ) );
-}, { bug: 'default-ignore.txt protects /plugins/wp-rocket/licence-data.php, so once WP Rocket is removed from a build its directory can never be deleted. rsync prints "cannot delete non-empty directory" on stdout, main.js counts that line as a change, and the check fails on every run until the file is removed by hand.' } );
+	// rsync keeps the directory (its file is protected) and says so; that is not a change.
+	assert( /cannot delete non-empty directory: plugins\/wp-rocket/.test( r.out ), 'rsync no longer reports the kept directory' + show( r ) );
+	assert( r.code === 0, 'expected the check to pass, got exit ' + r.code + show( r ) );
+} );
 
 test( 'deploy: a remote root containing a space is split into two arguments', () => {
 	const r = scenario( {

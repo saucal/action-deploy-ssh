@@ -374,7 +374,8 @@
 		var rsyncPlan = fs.readFileSync( rsyncManifest, 'utf8' ).toString();
 		// Directory entries don't count, as in check-against-manifest.sh: git tracks files, and any file
 		// in a directory has its own line. A bare "patches/" only means every file in it is ignored.
-		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) ).length;
+		// Nor does "cannot delete non-empty directory": rsync keeps a directory whose files are protected.
+		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) && ! line.startsWith( 'cannot delete non-empty directory: ' ) ).length;
 
 		// Functional rsync plan: written raw and header-free, so the check never sees our
 		// presentation headers.
