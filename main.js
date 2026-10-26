@@ -220,6 +220,8 @@
 
 		rsync.flags('v', false)
 			.set( '--info=NAME' )
+			// The server's rsync explains what its filters keep: lines naming a kept directory's files.
+			.set( 'remote-option', '--debug=FILTER' )
 			.set( '--dry-run' ); // run in dry-run mode
 
 		var dryRunCommand = rsync.command();
@@ -227,6 +229,7 @@
 		rsync._sources = [];
 		rsync.flags('v')
 			.unset( 'info' )
+			.unset( 'remote-option' )
 			.unset( 'dry-run' )
 			.source( remoteTarget + ':' + remoteRoot )
 			.destination( localRoot );
@@ -371,10 +374,23 @@
 
 		var { code, processedFiles, bufferPath: rsyncManifest } = await runCommand( dryRunCommand, core.isDebug() );
 		// rsync's plan is relative to the deploy root, which is what the check compares in.
-		var rsyncPlan = fs.readFileSync( rsyncManifest, 'utf8' ).toString();
+		// The filter debug lines ("[generator] protecting file …") are kept apart: the plan is every other line.
+		const isFilterLog = ( line ) => /^\[(generator|receiver|sender)\] /.test( line );
+		var rsyncOut = fs.readFileSync( rsyncManifest, 'utf8' ).toString().split( '\n' );
+		var rsyncPlan = rsyncOut.filter( ( line ) => ! isFilterLog( line ) ).join( '\n' );
 		// Directory entries don't count, as in check-against-manifest.sh: git tracks files, and any file
 		// in a directory has its own line. A bare "patches/" only means every file in it is ignored.
-		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) ).length;
+		// Nor does "cannot delete non-empty directory": rsync keeps a directory whose files are protected.
+		const keptDir = 'cannot delete non-empty directory: ';
+		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) && ! line.startsWith( keptDir ) ).length;
+		// Not drift, but still worth seeing: the build dropped the directory and the server keeps it.
+		const keptDirs = rsyncPlan.split( '\n' ).filter( ( l ) => l.startsWith( keptDir ) ).map( ( l ) => l.slice( keptDir.length ) );
+		const kept = rsyncOut.map( ( l ) => l.match( /^\[generator\] protecting file (.+) because of pattern (.+)$/ ) ).filter( Boolean );
+		for ( const dir of keptDirs ) {
+			const inner = kept.filter( ( m ) => m[ 1 ].startsWith( dir + '/' ) ).map( ( m ) => m[ 1 ] + ' (rule ' + m[ 2 ] + ')' );
+			core.notice( dir + '/ stays on the server: the build no longer has it, but '
+				+ ( inner.length ? 'the ignore list keeps ' + inner.join( ', ' ) : 'files in it are on the ignore list' ) + '.' );
+		}
 
 		// Functional rsync plan: written raw and header-free, so the check never sees our
 		// presentation headers.
