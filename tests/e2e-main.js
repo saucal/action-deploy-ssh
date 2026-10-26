@@ -360,7 +360,7 @@ test( 'consistency-check: a protected file inside a removed directory does not c
 	// rsync keeps the directory (its file is protected) and says so; that is not a change.
 	assert( /cannot delete non-empty directory: plugins\/wp-rocket/.test( r.out ), 'rsync no longer reports the kept directory' + show( r ) );
 	assert( r.code === 0, 'expected the check to pass, got exit ' + r.code + show( r ) );
-	assert( /::notice::plugins\/wp-rocket\/ stays on the server/.test( r.out ), 'the kept directory is not reported' + show( r ) );
+	assert( /::notice::plugins\/wp-rocket\/ stays on the server: .*keeps plugins\/wp-rocket\/licence-data\.php \(rule /.test( r.out ), 'the kept directory and its file are not reported' + show( r ) );
 
 	// Any file in that directory the ignore list doesn't cover still counts.
 	const extra = scenario( Object.assign( {}, base, {

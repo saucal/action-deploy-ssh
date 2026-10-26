@@ -378,8 +378,16 @@
 		const keptDir = 'cannot delete non-empty directory: ';
 		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) && ! line.startsWith( keptDir ) ).length;
 		// Not drift, but still worth seeing: the build dropped the directory and the server keeps it.
-		for ( const line of rsyncPlan.split( '\n' ).filter( ( l ) => l.startsWith( keptDir ) ) ) {
-			core.notice( line.slice( keptDir.length ) + '/ stays on the server: the build no longer has it, but files in it are on the ignore list.' );
+		const keptDirs = rsyncPlan.split( '\n' ).filter( ( l ) => l.startsWith( keptDir ) ).map( ( l ) => l.slice( keptDir.length ) );
+		if ( keptDirs.length ) {
+			// The server-side rsync names the files (and rules) that keep them; one too old for -M just gets the plain notice.
+			const why = await exec.getExecOutput( dryRunCommand.replace( /^rsync /, 'rsync -M--debug=FILTER ' ), [], { silent: true, ignoreReturnCode: true } );
+			const kept = why.exitCode === 0 || why.exitCode === 24 ? [ ...why.stdout.matchAll( /^\[generator\] protecting file (.+) because of pattern (.+)$/gm ) ] : [];
+			for ( const dir of keptDirs ) {
+				const inner = kept.filter( ( m ) => m[ 1 ].startsWith( dir + '/' ) ).map( ( m ) => m[ 1 ] + ' (rule ' + m[ 2 ] + ')' );
+				core.notice( dir + '/ stays on the server: the build no longer has it, but '
+					+ ( inner.length ? 'the ignore list keeps ' + inner.join( ', ' ) : 'files in it are on the ignore list' ) + '.' );
+			}
 		}
 
 		// Functional rsync plan: written raw and header-free, so the check never sees our
