@@ -360,6 +360,14 @@ test( 'consistency-check: a protected file inside a removed directory does not c
 	// rsync keeps the directory (its file is protected) and says so; that is not a change.
 	assert( /cannot delete non-empty directory: plugins\/wp-rocket/.test( r.out ), 'rsync no longer reports the kept directory' + show( r ) );
 	assert( r.code === 0, 'expected the check to pass, got exit ' + r.code + show( r ) );
+	assert( /::notice::plugins\/wp-rocket\/ stays on the server/.test( r.out ), 'the kept directory is not reported' + show( r ) );
+
+	// Any file in that directory the ignore list doesn't cover still counts.
+	const extra = scenario( Object.assign( {}, base, {
+		target: { '/plugins/wp-rocket/licence-data.php': 'licence written by the plugin', '/plugins/wp-rocket/wp-rocket.php': '<?php // left behind' },
+	} ) );
+	assert( extra.code === 1, 'an unignored file in the kept directory should fail the check, got exit ' + extra.code + show( extra ) );
+	assert( /deleting plugins\/wp-rocket\/wp-rocket\.php/.test( extra.out ), 'failed, but not on the unignored file' + show( extra ) );
 } );
 
 test( 'deploy: a remote root containing a space is split into two arguments', () => {

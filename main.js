@@ -375,7 +375,12 @@
 		// Directory entries don't count, as in check-against-manifest.sh: git tracks files, and any file
 		// in a directory has its own line. A bare "patches/" only means every file in it is ignored.
 		// Nor does "cannot delete non-empty directory": rsync keeps a directory whose files are protected.
-		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) && ! line.startsWith( 'cannot delete non-empty directory: ' ) ).length;
+		const keptDir = 'cannot delete non-empty directory: ';
+		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) && ! line.startsWith( keptDir ) ).length;
+		// Not drift, but still worth seeing: the build dropped the directory and the server keeps it.
+		for ( const line of rsyncPlan.split( '\n' ).filter( ( l ) => l.startsWith( keptDir ) ) ) {
+			core.notice( line.slice( keptDir.length ) + '/ stays on the server: the build no longer has it, but files in it are on the ignore list.' );
+		}
 
 		// Functional rsync plan: written raw and header-free, so the check never sees our
 		// presentation headers.
