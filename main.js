@@ -313,6 +313,16 @@
 				var outputBuffer = '';
 				var { code, processedFiles, bufferPath } = await runCommand( rsyncDiffCommand, core.isDebug() );
 
+				// A depth-1 clone (a consistency check's) has no HEAD~1: git diff would fail
+				// silently and leave a header-only file that reads as "Empty = clean".
+				if ( 0 !== await exec.exec( 'git', [ '-C', localRootRepo, 'rev-parse', '-q', '--verify', ref + '^{commit}' ], { ignoreReturnCode: true, silent: true } ) ) {
+					var missing = '# NOT COMPUTED: ' + ref + ' is not in this checkout (a shallow clone has no previous\n' +
+						'#               build). This says nothing about drift; see diff_current-build-vs-target.\n';
+					var missing_path = writeBufferToFile( diffToDo.header + missing, name );
+					fs.renameSync( missing_path, path.join( diff_path, path.basename( missing_path ) ) );
+					continue;
+				}
+
 				await exec.exec( 'bash', [ __dirname + '/consistency-diff.sh', ref ], {
 					env: {
 						PATH_DIR: localRootRepo,
@@ -382,7 +392,8 @@
 		// in a directory has its own line. A bare "patches/" only means every file in it is ignored.
 		// Nor does "cannot delete non-empty directory": rsync keeps a directory whose files are protected.
 		const keptDir = 'cannot delete non-empty directory: ';
-		processedFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) && ! line.startsWith( keptDir ) ).length;
+		const planFiles = rsyncPlan.split( '\n' ).filter( ( line ) => line.trim() !== '' && ! line.endsWith( '/' ) && ! line.startsWith( keptDir ) );
+		processedFiles = planFiles.length;
 		// Not drift, but still worth seeing: the build dropped the directory and the server keeps it.
 		const keptDirs = rsyncPlan.split( '\n' ).filter( ( l ) => l.startsWith( keptDir ) ).map( ( l ) => l.slice( keptDir.length ) );
 		const kept = rsyncOut.map( ( l ) => l.match( /^\[generator\] protecting file (.+) because of pattern (.+)$/ ) ).filter( Boolean );
@@ -458,7 +469,10 @@
 		// If we have the consistency check to run, check that there's no files changed.
 		if ( consistencyCheck ) {
 			if( processedFiles > 0 ) {
-				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' );
+				// How much drifted and where, so the annotation alone points at the cause.
+				const tops = [ ...new Set( planFiles.map( ( l ) => l.replace( /^deleting /, '' ).split( '/' ).slice( 0, -1 ).slice( 0, 2 ).join( '/' ) || '(root)' ) ) ];
+				const where = processedFiles + ' path(s), under ' + tops.slice( 0, 5 ).join( ', ' ) + ( tops.length > 5 ? ' and ' + ( tops.length - 5 ) + ' more' : '' );
+				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' + where + ". See the 'deploy-rsync-plan' artifact for the list." );
 				await prepareArtifacts( { needDiff: true } );
 				// Fail on the drift first: a failing hook below exits the process, and the job's error
 				// should still name the drift.
