@@ -1,6 +1,8 @@
 #!/bin/bash
 REF="${1:-HEAD}"
 cd "${PATH_DIR}" || exit 1;
+# Print paths as they are in the diff bodies: by default git octal-quotes non-ASCII names.
+git() { command git -c core.quotePath=false "$@"; }
 
 # rsync never deploys the files in its ignore list (composer.json/lock, vendor/,
 # auth.json, logs, ...), so they must not surface in the consistency diff. The list is
@@ -34,7 +36,10 @@ MAX_LINE=300
 # the artifact headers/README. -U0 drops context lines: on minified files the context is
 # noise, and only the changed lines answer "what differs".
 git add -A . > /dev/null 2>&1
-git --no-pager diff -R -M --name-status "$REF" | while read status file; do
+# -z: names come raw (no quoting of non-ASCII, backslash or quote characters). A rename
+# carries two names; they print tab-separated, as the plain format did.
+git --no-pager diff -z -R -M --name-status "$REF" | while IFS= read -r -d '' status && IFS= read -r -d '' file; do
+  case "$status" in R*|C*) IFS= read -r -d '' to; file="$file"$'\t'"$to" ;; esac
   rel="$file"
   if [ -n "$deploy_root" ]; then
     case "$file" in
