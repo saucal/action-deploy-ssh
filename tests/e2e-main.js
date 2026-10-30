@@ -97,6 +97,11 @@ function scenario( opts ) {
 	Object.entries( opts.target || {} ).forEach( ( [ p, body ] ) => write( target, p, body ) );
 	( ( opts.chmod || {} ).target || [] ).forEach( ( [ p, m ] ) => fs.chmodSync( path.join( target, p ), m ) );
 
+	if ( opts.noPrevious ) {
+		// A depth-1 clone, as a consistency check gets: HEAD has no parent to compare with.
+		sh( built, 'git checkout -q --orphan only && git commit -qm build --allow-empty' );
+	}
+
 	let manifestPath = '';
 	if ( opts.manifest ) {
 		manifestPath = path.join( runnerTemp, 'git-manifest' );
@@ -287,6 +292,24 @@ test( 'consistency-check: drift on the target fails and writes nothing', () => {
 	} );
 	assert( r.code === 1, 'expected exit 1, got ' + r.code + show( r ) );
 	assert( JSON.stringify( r.before ) === JSON.stringify( r.after ), 'failed check still wrote' + show( r ) );
+	// The annotation says how much drifted and where, not only that something did.
+	assert( /::error title=Pre-push consistency check failed[^\n]*1 path[^\n]*plugins\//.test( r.out ), 'annotation lacks the count / top-level dirs' + show( r ) );
+} );
+
+test( 'consistency-check: a checkout without HEAD~1 says the deployed-build diff was not computed', () => {
+	const r = scenario( {
+		previous: [ '/plugins/acme/acme.php' ],
+		build: { '/plugins/acme/acme.php': '/plugins/acme/acme.php\n' },
+		targetFromPrevious: true,
+		noPrevious: true,
+		target: { '/plugins/acme/hotfix.php': 'edited on the server' },
+		inputs: { 'consistency-check': 'true' },
+	} );
+	assert( r.code === 1, 'expected exit 1, got ' + r.code + show( r ) );
+	const deployed = r.driftDiff.split( '### ' ).find( ( f ) => f.startsWith( 'diff_deployed-build-vs-target' ) ) || '';
+	assert( /NOT COMPUTED/.test( deployed ), 'header-only deployed diff reads as clean:\n' + deployed );
+	const current = r.driftDiff.split( '### ' ).find( ( f ) => f.startsWith( 'diff_current-build-vs-target' ) ) || '';
+	assert( /hotfix\.php/.test( current ), 'current diff lost the drift:\n' + current );
 } );
 
 test( 'manifest: a normal build reconciles and deploys', () => {
