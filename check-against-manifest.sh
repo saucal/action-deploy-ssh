@@ -45,8 +45,9 @@ keep_unignored() {
 
 	# One check-ignore for the whole list; the per-line loop this replaces spawned a git
 	# process per manifest entry.
-	ignored="$( printf '%s\n' "$input" | git -C "$match_repo" -c core.excludesFile="$rules_file" \
-		check-ignore --stdin --no-index 2>/dev/null )"
+	# -z: without it check-ignore C-quotes non-ASCII names, and grep -x below never matches them.
+	ignored="$( printf '%s\n' "$input" | tr '\n' '\0' | git -C "$match_repo" -c core.excludesFile="$rules_file" \
+		check-ignore -z --stdin --no-index 2>/dev/null | tr '\0' '\n' )"
 	rm -f "$rules_file"
 
 	if [ -z "$ignored" ]; then

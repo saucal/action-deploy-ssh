@@ -495,11 +495,9 @@
 			// Guarded: the script tolerates a missing manifest, so we must not throw here either.
 			var gitManifestRaw = fs.existsSync( manifest ) ? fs.readFileSync( manifest, 'utf8' ).toString() : '';
 			var manifestDiffOut = path.join( process.env.RUNNER_TEMP || '/tmp', 'manifest-mismatch_' + timestamp + '.diff' );
-			// build-to-git's manifest is repo-rooted; put it in deploy-root paths, dropping
-			// changes outside the deploy root (rsync can never send those).
-			var gitManifestScoped = deployPrefix
-				? writeBufferToFile( rsyncRulesFormatter.scopeManifest( gitManifestRaw, deployPrefix ), 'git-manifest-scoped' )
-				: manifest;
+			// build-to-git's manifest is repo-rooted and git-quoted; put it in raw deploy-root
+			// paths, dropping changes outside the deploy root (rsync can never send those).
+			var gitManifestScoped = writeBufferToFile( rsyncRulesFormatter.scopeManifest( gitManifestRaw, deployPrefix ), 'git-manifest-scoped' );
 			var code = await exec.exec( 'bash', [ __dirname + '/check-against-manifest.sh' ], {
 				env: {
 					PATH_DIR: localRootRepo,

@@ -337,20 +337,21 @@ test( 'manifest: drift the build did not declare blocks the deploy and writes no
 	assert( JSON.stringify( r.before ) === JSON.stringify( r.after ), 'blocked deploy still wrote' + show( r ) );
 } );
 
-// ---- real defects, pinned as they behave today --------------------------------------
-
-test( 'manifest: a changed file with a non-ASCII name blocks the deploy', () => {
+test( 'manifest: a non-ASCII name the build adds or deletes reconciles and deploys', () => {
 	const r = scenario( {
-		previous: [ '/plugins/acme/acme.php' ],
+		previous: [ '/plugins/acme/acme.php', '/plugins/acme/résumé.txt' ],
 		targetFromPrevious: true,
+		remove: [ '/plugins/acme/résumé.txt' ],
 		build: { '/plugins/acme/café.php': 'new' },
 		manifest: true,
 		inputs: {},
 	} );
-	assert( r.code !== 0, 'expected the deploy to be blocked (today), got 0' + show( r ) );
-	assert( /DO NOT MATCH/.test( r.out ), 'blocked, but not by the manifest mismatch' + show( r ) );
-	assert( /"plugins\/acme\/caf\\303\\251\.php"/.test( r.out ), 'the mismatch is not the quoted name' + show( r ) );
-}, { bug: 'build-to-git\'s git diff-tree quotes the path ("caf\\303\\251.php") while rsync prints it raw, so the two lists never reconcile and the site cannot deploy until the name changes.' } );
+	assert( r.code === 0, 'exit ' + r.code + show( r ) );
+	assert( r.content( '/plugins/acme/café.php' ) === 'new', 'not deployed' + show( r ) );
+	assert( ! r.exists( '/plugins/acme/résumé.txt' ), 'deletion not applied' + show( r ) );
+} );
+
+// ---- real defects, pinned as they behave today --------------------------------------
 
 test( 'manifest: an added symlink blocks the deploy', () => {
 	const r = scenario( {

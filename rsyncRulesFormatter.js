@@ -142,23 +142,39 @@ function parse( input ) {
 // got them wrong twice.
 function scopeManifest( text, prefix ) {
 	const root = String( prefix || '' ).replace( /^\/+|\/+$/g, '' );
-	if ( ! root ) {
-		return String( text );
-	}
-
-	const inside = root + '/';
+	const inside = root ? root + '/' : '';
 	return String( text ).split( '\n' ).reduce( ( out, line ) => {
-		const m = line.match( /^([+-] )(")?(.*)$/ );
+		const m = line.match( /^([+-] )(.*)$/ );
 		if ( ! m ) {
 			return out;
 		}
-		// diff-tree quotes unusual names; the path, prefix included, sits inside the quotes.
-		const [ , mark, quote = '', rest ] = m;
-		if ( rest.startsWith( inside ) ) {
-			out.push( mark + quote + rest.slice( inside.length ) );
+		const path = unquoteGitPath( m[ 2 ] );
+		if ( path.startsWith( inside ) ) {
+			out.push( m[ 1 ] + path.slice( inside.length ) );
 		}
 		return out;
 	}, [] ).join( '\n' ) + ( String( text ).endsWith( '\n' ) ? '\n' : '' );
+}
+
+// diff-tree C-quotes unusual names ("caf\303\251.php", "a\"b", "back\\slash"); rsync
+// prints them raw, so the manifest must be compared unquoted.
+function unquoteGitPath( p ) {
+	const m = p.match( /^"(.*)"$/ );
+	if ( ! m ) {
+		return p;
+	}
+	const esc = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13 };
+	const bytes = [];
+	for ( const [ part, oct, ch ] of m[ 1 ].matchAll( /\\([0-7]{3})|\\(.)|[^\\]+/g ) ) {
+		if ( oct ) {
+			bytes.push( parseInt( oct, 8 ) );
+		} else if ( ch ) {
+			bytes.push( ...( ch in esc ? [ esc[ ch ] ] : Buffer.from( ch ) ) );
+		} else {
+			bytes.push( ...Buffer.from( part ) );
+		}
+	}
+	return Buffer.from( bytes ).toString();
 }
 
 function sortRules( rules ) {

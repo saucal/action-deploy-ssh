@@ -430,6 +430,16 @@ module.exports = [
 		},
 	},
 	{
+		// check-ignore C-quotes non-ASCII names unless -z, so the ignored path was never dropped.
+		name: 'manifest: an ignored unicode path is dropped from the git side',
+		manifest: {
+			ignore: '/uploads/',
+			git: '+ plugins/a.php\n+ uploads/résumé.txt\n',
+			rsync: 'plugins/a.php\n',
+			expect: 'MATCH',
+		},
+	},
+	{
 		name: 'manifest: a unicode path round-trips',
 		manifest: {
 			ignore: '/vendor/',
@@ -657,7 +667,13 @@ module.exports = [
 		// build-to-git's diff-tree quotes non-ASCII names; the prefix sits inside the quotes.
 		'manifest: scoping handles git-quoted paths',
 		() => scope( '+ "wp-content/caf\\303\\251.php"\n+ "root-caf\\303\\251.txt"\n', 'wp-content' ),
-		'+ "caf\\303\\251.php"\n'
+		'+ café.php\n'
+	),
+	pinEqual(
+		// rsync prints names raw, so the manifest is unquoted even with no subdirectory.
+		'manifest: scoping unquotes git-quoted paths (octal, \\", \\\\, \\t)',
+		() => scope( '- "r\\303\\251sum\\303\\251.txt"\n+ "we\\"ird\\\\back\\tslash.php"\n+ plain.php\n', '' ),
+		'- résumé.txt\n+ we"ird\\back\tslash.php\n+ plain.php\n'
 	),
 	pinEqual(
 		'manifest: scoping handles a nested deploy root',
