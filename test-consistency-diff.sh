@@ -22,6 +22,8 @@ write_fixtures() { # $1 = generation marker
   { echo "ctx-top"; echo "short-$1"; printf 'var m=%s;%s\n' "$1" "$big"; echo "ctx-bottom"; } > mixed.js
   # short.php: nothing truncated, so its header must stay a plain "diff --git".
   { echo "ctx-top"; echo "value-$1"; echo "ctx-bottom"; } > short.php
+  # Non-ASCII name: git would print it octal-quoted ("r\303\251sum\303\251.txt").
+  echo "resume-$1" > "résumé.txt"
 }
 
 write_fixtures 0
@@ -38,6 +40,8 @@ git add -A && git commit -qm build-current
 write_fixtures 2
 rm removed.txt
 echo "new" > added.txt
+echo "new" > "café.txt"
+echo "new" > 'back\slash.txt'
 printf 'a\r\nb\r\nc\r\n' > crlf.php
 printf 'if (x) {\n\t\ty();\n}\n' > reindent.php
 
@@ -72,6 +76,12 @@ if grep -q '^-a$' <<< "$out"; then fail "whitespace-only body not collapsed"; fi
 grep -q '^diff --git --simple A removed.txt$' <<< "$out" || fail "missing A removed.txt"
 grep -q '^diff --git --simple D added.txt$' <<< "$out" || fail "missing D added.txt"
 if grep -q 'plain.txt' <<< "$out"; then fail "unchanged file listed"; fi
+
+# Paths print as they are on disk: no octal quoting, no backslash eaten by read.
+grep -q '^diff --git b/résumé.txt a/résumé.txt$' <<< "$out" || fail "non-ASCII modified path mangled"
+grep -q '^-resume-2$' <<< "$out" || fail "non-ASCII modified body missing"
+grep -q '^diff --git --simple D café.txt$' <<< "$out" || fail "non-ASCII added path mangled"
+grep -qF 'diff --git --simple D back\slash.txt' <<< "$out" || fail "backslash path mangled"
 
 # Both artifacts run through the same -R frame, so '+' is the build side and '-' the
 # target in each. Only which build is compared changes; HEAD~1 must label the
