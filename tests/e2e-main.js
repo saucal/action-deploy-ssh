@@ -296,6 +296,20 @@ test( 'consistency-check: drift on the target fails and writes nothing', () => {
 	assert( /::error title=Pre-push consistency check failed[^\n]*1 path[^\n]*plugins\//.test( r.out ), 'annotation lacks the count / top-level dirs' + show( r ) );
 } );
 
+test( 'consistency-check: drift-annotation warning still fails the step, but annotates as warnings', () => {
+	const r = scenario( {
+		previous: [ '/plugins/acme/acme.php' ],
+		build: { '/plugins/acme/acme.php': '/plugins/acme/acme.php\n' },
+		targetFromPrevious: true,
+		target: { '/plugins/acme/hotfix.php': 'edited on the server' },
+		inputs: { 'consistency-check': 'true', 'drift-annotation': 'warning' },
+	} );
+	assert( r.code === 1, 'expected exit 1, got ' + r.code + show( r ) );
+	assert( /::warning title=Pre-push consistency check failed[^\n]*1 path[^\n]*plugins\//.test( r.out ), 'no warning annotation' + show( r ) );
+	assert( /::warning::Pre-push consistency check failed\. Target filesystem/.test( r.out ), 'no warning for the failure line' + show( r ) );
+	assert( ! /::error/.test( r.out ), 'still annotates an error' + show( r ) );
+} );
+
 test( 'consistency-check: a checkout without HEAD~1 says the deployed-build diff was not computed', () => {
 	const r = scenario( {
 		previous: [ '/plugins/acme/acme.php' ],

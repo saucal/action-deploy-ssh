@@ -57,6 +57,10 @@ inputs:
     description: ""
     required: false
     default: ''
+  drift-annotation:
+    description: "How a failed consistency check annotates its drift: 'error' (default) or 'warning'. The step fails either way; 'warning' is for a caller that reports the drift itself."
+    required: false
+    default: 'error'
   manifest:
     description: "The path to the manifest file to use with the --files-from rsync param"
     required: false

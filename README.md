@@ -67,6 +67,9 @@ You can push to SSH using rsync with the following basic example
     # This will make the action run rsync with --dry-run and fail if there was output (so that we can check if rsync "sees" changes)
     consistency-check: ""
 
+    # How a failed consistency check annotates its drift: 'error' or 'warning' (the step fails either way)
+    drift-annotation: 'error'
+
     # NEED some help here i though the manifest file was dynamically being produced. What's the point of accepting as a param ?
     manifest: ''
 
