@@ -472,13 +472,19 @@
 				// How much drifted and where, so the annotation alone points at the cause.
 				const tops = [ ...new Set( planFiles.map( ( l ) => l.replace( /^deleting /, '' ).split( '/' ).slice( 0, -1 ).slice( 0, 2 ).join( '/' ) || '(root)' ) ) ];
 				const where = processedFiles + ' path(s), under ' + tops.slice( 0, 5 ).join( ', ' ) + ( tops.length > 5 ? ' and ' + ( tops.length - 5 ) + ' more' : '' );
-				console.log( '::error title=Pre-push consistency check failed. Target filesystem does not match build directory.::' + where + ". See the 'deploy-rsync-plan' artifact for the list." );
+				// A caller that reports the drift itself (continue-on-error) can ask for warnings: the step still fails.
+				const asWarning = core.getInput( 'drift-annotation', { required: false } ) === 'warning';
+				console.log( '::' + ( asWarning ? 'warning' : 'error' ) + ' title=Pre-push consistency check failed. Target filesystem does not match build directory.::' + where + ". See the 'deploy-rsync-plan' artifact for the list." );
 				await prepareArtifacts( { needDiff: true } );
 				// Fail on the drift first: a failing hook below exits the process, and the job's error
 				// should still name the drift.
-				core.setFailed(
-					'Pre-push consistency check failed. Target filesystem does not match build directory.'
-				);
+				const failed = 'Pre-push consistency check failed. Target filesystem does not match build directory.';
+				if ( asWarning ) {
+					core.warning( failed );
+					process.exitCode = 1;
+				} else {
+					core.setFailed( failed );
+				}
 				// Still run the pre hooks: in a consistency check they only inspect (e.g. the WP core
 				// hook records the server's core version), so reconcile sees core drift in the same run
 				// instead of only after the file drift is fixed.
