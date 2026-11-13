@@ -54,6 +54,9 @@ const BUILD_TO_GIT_MANIFEST =
 	"awk '{output=\"\"; for (i = 6; i <= NF; i++) output = output (output == \"\" ? \"\" : OFS) $i; if( $3 != $4 ) print $5 \"\\t\" output; }' | " +
 	"sed -E \"s/^[AMH]\\t/+ /\" | sed -E \"s/^[D]\\t/- /\"";
 
+// 2020-01-01T00:00:00Z: a date no fresh checkout can carry.
+const OLD = 1577836800;
+
 function scenario( opts ) {
 	const ws = fs.mkdtempSync( path.join( os.tmpdir(), 'e2e-' ) );
 	const built = path.join( ws, 'built' );
@@ -96,6 +99,8 @@ function scenario( opts ) {
 	}
 	Object.entries( opts.target || {} ).forEach( ( [ p, body ] ) => write( target, p, body ) );
 	( ( opts.chmod || {} ).target || [] ).forEach( ( [ p, m ] ) => fs.chmodSync( path.join( target, p ), m ) );
+	// Age a server file to a known date, as files on a live site are.
+	( opts.oldTarget || [] ).forEach( ( p ) => fs.utimesSync( path.join( target, p ), OLD, OLD ) );
 
 	if ( opts.noPrevious ) {
 		// A depth-1 clone, as a consistency check gets: HEAD has no parent to compare with.
@@ -161,7 +166,9 @@ function scenario( opts ) {
 	const after = tree( target );
 	const files = {};
 	const modes = {};
+	const mtimes = {};
 	after.forEach( ( p ) => {
+		mtimes[ p ] = Math.floor( fs.statSync( path.join( target, p ) ).mtimeMs / 1000 );
 		files[ p ] = fs.readFileSync( path.join( target, p ), 'utf8' );
 		modes[ p ] = ( fs.statSync( path.join( target, p ) ).mode & 0o777 ).toString( 8 );
 	} );
@@ -172,6 +179,7 @@ function scenario( opts ) {
 		before,
 		after,
 		modes,
+		mtimes,
 		driftDiff,
 		content: ( p ) => {
 			if ( ! ( p in files ) ) {
@@ -269,6 +277,35 @@ test( 'deploy: ssh-handle-perms=true does propagate the mode', () => {
 	} );
 	assert( r.code === 0, 'exit ' + r.code + show( r ) );
 	assert( r.modes[ '/bin/run.sh' ] === '755', 'mode not propagated: ' + r.modes[ '/bin/run.sh' ] + show( r ) );
+} );
+
+// The build is a fresh checkout, so every file in it is dated "now". Syncing times would
+// stamp that date on every deployed file, unchanged ones included.
+function mtimeScenario( inputs ) {
+	return scenario( {
+		build: { '/plugins/acme/same.php': 'same content', '/plugins/acme/changed.php': 'v2' },
+		target: { '/plugins/acme/same.php': 'same content', '/plugins/acme/changed.php': 'v1' },
+		oldTarget: [ '/plugins/acme/same.php', '/plugins/acme/changed.php' ],
+		inputs: inputs || {},
+	} );
+}
+function assertMtimes( r ) {
+	assert( r.code === 0, 'exit ' + r.code + show( r ) );
+	assert( r.content( '/plugins/acme/changed.php' ) === 'v2', 'changed file not sent' + show( r ) );
+	assert( r.mtimes[ '/plugins/acme/same.php' ] === OLD,
+		'unchanged file re-dated to ' + new Date( r.mtimes[ '/plugins/acme/same.php' ] * 1000 ).toISOString() + show( r ) );
+	assert( r.mtimes[ '/plugins/acme/changed.php' ] > OLD, 'changed file kept its old date' + show( r ) );
+}
+
+test( 'deploy: an unchanged file keeps its date on the server', () => {
+	assertMtimes( mtimeScenario() );
+} );
+
+test( 'deploy: an unchanged file keeps its date even when ssh-flags/ssh-extra-options are overridden', () => {
+	assertMtimes( mtimeScenario( {
+		'ssh-flags': 'avrcz',
+		'ssh-extra-options': 'delete no-inc-recursive size-only ignore-times omit-dir-times no-owner no-group no-dirs',
+	} ) );
 } );
 
 test( 'consistency-check: an in-sync target passes and nothing is written', () => {

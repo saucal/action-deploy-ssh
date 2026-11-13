@@ -179,7 +179,7 @@ Case files are `tests/cases-*.js`, picked up automatically:
 
 `tests/harness.js` runs rsync with the production flags taken from `main.js`
 (`-avrcz` plus `--delete --no-inc-recursive --size-only --ignore-times --omit-dir-times
---no-owner --no-group --no-dirs --no-perms`), so the tests measure the real deploy rather
+--no-owner --no-group --no-dirs --no-perms --no-times`), so the tests measure the real deploy rather
 than a convenient approximation.
 
 Writing a case: prefer the declarative fields (`rules`, `local`, `send`, `remote`,

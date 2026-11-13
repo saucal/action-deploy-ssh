@@ -20,7 +20,7 @@ const ACTION_DIR = path.join( __dirname, '..' );
 const PROD_FLAGS = [ '-avrcz' ];
 const PROD_OPTIONS = [
 	'--delete', '--no-inc-recursive', '--size-only', '--ignore-times',
-	'--omit-dir-times', '--no-owner', '--no-group', '--no-dirs', '--no-perms',
+	'--omit-dir-times', '--no-owner', '--no-group', '--no-dirs', '--no-perms', '--no-times',
 ];
 
 function tmpdir( tag ) {

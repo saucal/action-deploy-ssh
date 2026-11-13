@@ -1,6 +1,6 @@
 // Characterisation of the DEPLOYMENT MECHANICS -- what the real rsync invocation
 // (PROD_FLAGS + PROD_OPTIONS, i.e. `-avrcz --delete --no-inc-recursive --size-only
-// --ignore-times --omit-dir-times --no-owner --no-group --no-dirs --no-perms`) actually
+// --ignore-times --omit-dir-times --no-owner --no-group --no-dirs --no-perms --no-times`) actually
 // does to a target filesystem.
 //
 // Every expectation here was RECORDED from a real run, not reasoned about. Where the
@@ -262,7 +262,7 @@ module.exports = [
 			h.write( dst, '/a.php', 'a much longer body on the server' );
 		}, ( r ) => eq( 'different-size overwrite', snap( r.dst ), [ '/a.php = "short"' ] ) );
 	} ),
-	fsCase( 'deploy: identical content is not re-sent, but its mtime IS synced', () => {
+	fsCase( 'deploy: identical content is not re-sent, and its mtime is left alone', () => {
 		scene( ( src, dst ) => {
 			h.write( src, '/a.php', 'identical' );
 			h.write( dst, '/a.php', 'identical' );
@@ -270,9 +270,10 @@ module.exports = [
 			fs.utimesSync( path.join( dst, 'a.php' ), T_NEW, T_NEW );
 		}, ( r ) => {
 			eq( 'content', snap( r.dst ), [ '/a.php = "identical"' ] );
-			eq( 'mtime pulled back to the source mtime',
+			// --no-times: the build's checkout date must not leak onto unchanged server files.
+			eq( 'mtime kept',
 				fs.statSync( path.join( r.dst, 'a.php' ) ).mtime.toISOString(),
-				T_OLD.toISOString() );
+				T_NEW.toISOString() );
 		} );
 	} ),
 	fsCase( 'deploy: a target file NEWER than the local one is still overwritten', () => {
@@ -283,8 +284,8 @@ module.exports = [
 			fs.utimesSync( path.join( dst, 'a.php' ), T_NEW, T_NEW );
 		}, ( r ) => {
 			eq( 'newer target clobbered', snap( r.dst ), [ '/a.php = "old build"' ] );
-			eq( 'mtime', fs.statSync( path.join( r.dst, 'a.php' ) ).mtime.toISOString(),
-				T_OLD.toISOString() );
+			// --no-times: a sent file is dated by the deploy, not by the build.
+			eq( 'mtime is the deploy time', Math.abs( fs.statSync( path.join( r.dst, 'a.php' ) ).mtimeMs - Date.now() ) < 60000, true );
 		} );
 	}, null, 'By design: the build is the source of truth, so a deploy reverts drift on the target. Catching that drift is exactly what the consistency check is for.' ),
 	fsCase( 'deploy: a newer target of the same size and same content survives untouched', () => {
