@@ -113,6 +113,9 @@
 	} else {
 		extraOptions += ' no-perms';
 	}
+	// The build is a fresh checkout dated "now": -a's -t would re-date every unchanged file
+	// on the server. -c already decides what changed; sent files get the deploy time.
+	extraOptions += ' no-times';
 
 	shellParams = shellParams.split( ' ' );
 	extraOptions = extraOptions.split( ' ' );
